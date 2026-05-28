@@ -25,8 +25,18 @@
     const ICE_SERVERS = {
         iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            { urls: "stun:stun.cloudflare.com:3478" },
             {
                 urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            },
+            {
+                urls: "turn:openrelay.metered.ca:443",
                 username: "openrelayproject",
                 credential: "openrelayproject"
             },
@@ -37,6 +47,7 @@
             }
         ]
     };
+
 
     const MAX_FILE_SIZE_MB = 10;
     const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -816,6 +827,19 @@
                 });
             };
 
+            // FIX: renegotiate when tracks are added after peer connection is created
+            // (happens when camera permission is granted after socket connects)
+            pc.onnegotiationneeded = async () => {
+                if (pc.signalingState !== "stable") return;
+                if (!pc.__offerStarted) return; // only the offerer renegotiates
+                try {
+                    pc.__offerStarted = false; // reset so makeOffer can re-run
+                    await makeOffer(peer);
+                } catch (err) {
+                    console.warn("Renegotiation failed", err);
+                }
+            };
+
             pc.onconnectionstatechange = () => {
                 if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
                     console.warn("Peer connection state:", pc.connectionState, peer.email);
@@ -950,6 +974,18 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 $("local-video").srcObject = localStream;
                 $("local-no-video").classList.add("hidden");
+
+                // FIX: if peer connections already exist (socket connected before camera was ready),
+                // add tracks now — onnegotiationneeded will fire and trigger a new offer automatically
+                for (const [peerEmail, pc] of Object.entries(peerConnections)) {
+                    const senders = pc.getSenders();
+                    for (const track of localStream.getTracks()) {
+                        const alreadySending = senders.some((s) => s.track && s.track.kind === track.kind);
+                        if (!alreadySending) {
+                            pc.addTrack(track, localStream);
+                        }
+                    }
+                }
             } catch {
                 $("local-no-video").classList.remove("hidden");
                 $("local-no-video").textContent = "Camera or microphone permission was blocked.";
