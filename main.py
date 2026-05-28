@@ -1,10 +1,14 @@
 from pathlib import Path
 from datetime import datetime
+import asyncio
 import json
 import os
 import random
 import sqlite3
 import string
+
+# Global lock — prevents two simultaneous polls from creating two separate rooms
+_match_lock = asyncio.Lock()
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -438,107 +442,169 @@ async def join_queue(request: Request):
     data = await request.json()
     user_name, user_email, subject = clean_user(data)
 
-    conn = connect_db()
-    cur = conn.cursor()
+    # FIX: lock ensures only one request runs the matching logic at a time,
+    # preventing two users from simultaneously creating two separate rooms.
+    async with _match_lock:
+        conn = connect_db()
+        # Enable WAL mode for better SQLite concurrency
+        conn.execute("PRAGMA journal_mode=WAL")
+        cur = conn.cursor()
 
-    try:
-        cur.execute("SELECT * FROM match_results WHERE user_email = ?", (user_email,))
-        existing = cur.fetchone()
+        try:
+            # Check if this user already has a pending match result
+            cur.execute("SELECT * FROM match_results WHERE user_email = ?", (user_email,))
+            existing = cur.fetchone()
 
-        if existing:
-            cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
-            conn.commit()
-            return {
-                "success": True,
-                "matched": True,
-                "room_code": existing["room_code"],
-                "subject": existing["subject"],
-                "members": json.loads(existing["members"] or "[]"),
-            }
+            if existing:
+                cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
+                conn.commit()
+                return {
+                    "success": True,
+                    "matched": True,
+                    "room_code": existing["room_code"],
+                    "subject": existing["subject"],
+                    "members": json.loads(existing["members"] or "[]"),
+                }
 
-        cur.execute("DELETE FROM waiting_queue WHERE user_email = ?", (user_email,))
-        cur.execute(
-            """
-            INSERT INTO waiting_queue (user_name, user_email, subject, joined_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_name, user_email, subject, datetime.now().isoformat()),
-        )
-
-        cur.execute(
-            """
-            SELECT user_name, user_email, subject
-            FROM waiting_queue
-            WHERE subject = ?
-            ORDER BY joined_at ASC
-            """,
-            (subject,),
-        )
-        waiting = cur.fetchall()
-
-        if len(waiting) >= 2:
-            group = waiting[:3] if len(waiting) >= 3 else waiting[:2]
-            members = [
-                {"name": row["user_name"], "email": row["user_email"], "subject": row["subject"]}
-                for row in group
-            ]
-
-            room_code = create_unique_room(cur)
+            # Re-insert user into queue to refresh their timestamp
+            cur.execute("DELETE FROM waiting_queue WHERE user_email = ?", (user_email,))
             cur.execute(
                 """
-                INSERT INTO rooms (code, host, subject, members, messages, created_at, active)
-                VALUES (?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO waiting_queue (user_name, user_email, subject, joined_at)
+                VALUES (?, ?, ?, ?)
                 """,
-                (
-                    room_code,
-                    members[0]["name"],
-                    subject,
-                    json.dumps(members),
-                    json.dumps([]),
-                    datetime.now().isoformat(),
-                ),
+                (user_name, user_email, subject, datetime.now().isoformat()),
             )
 
-            for member in members:
-                cur.execute("DELETE FROM waiting_queue WHERE user_email = ?", (member["email"],))
+            # --- Try same-subject match first ---
+            cur.execute(
+                """
+                SELECT user_name, user_email, subject
+                FROM waiting_queue
+                WHERE subject = ?
+                ORDER BY joined_at ASC
+                """,
+                (subject,),
+            )
+            waiting = cur.fetchall()
+
+            if len(waiting) >= 2:
+                group = waiting[:3] if len(waiting) >= 3 else waiting[:2]
+                members = [
+                    {"name": r["user_name"], "email": r["user_email"], "subject": r["subject"]}
+                    for r in group
+                ]
+                room_code = create_unique_room(cur)
                 cur.execute(
                     """
-                    INSERT OR REPLACE INTO match_results
-                    (user_email, room_code, subject, members, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO rooms (code, host, subject, members, messages, created_at, active)
+                    VALUES (?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
-                        member["email"],
-                        room_code,
-                        subject,
-                        json.dumps(members),
+                        room_code, members[0]["name"], subject,
+                        json.dumps(members), json.dumps([]),
                         datetime.now().isoformat(),
                     ),
                 )
+                for member in members:
+                    cur.execute("DELETE FROM waiting_queue WHERE user_email = ?", (member["email"],))
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO match_results
+                        (user_email, room_code, subject, members, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            member["email"], room_code, subject,
+                            json.dumps(members), datetime.now().isoformat(),
+                        ),
+                    )
+                cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
+                conn.commit()
+                return {
+                    "success": True,
+                    "matched": True,
+                    "cross_subject": False,
+                    "room_code": room_code,
+                    "subject": subject,
+                    "members": members,
+                }
 
-            cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
+            # FIX: cross-subject fallback — if no same-subject partner,
+            # look for ANY student waiting in the queue
+            cur.execute(
+                """
+                SELECT user_name, user_email, subject
+                FROM waiting_queue
+                WHERE user_email != ?
+                ORDER BY joined_at ASC
+                LIMIT 1
+                """,
+                (user_email,),
+            )
+            any_partner = cur.fetchone()
+
+            if any_partner:
+                partner_subject = any_partner["subject"]
+                members = [
+                    {"name": user_name, "email": user_email, "subject": subject},
+                    {
+                        "name": any_partner["user_name"],
+                        "email": any_partner["user_email"],
+                        "subject": partner_subject,
+                    },
+                ]
+                room_code = create_unique_room(cur)
+                # Label room with both subjects
+                room_subject = f"{subject} / {partner_subject}"
+                cur.execute(
+                    """
+                    INSERT INTO rooms (code, host, subject, members, messages, created_at, active)
+                    VALUES (?, ?, ?, ?, ?, ?, 1)
+                    """,
+                    (
+                        room_code, user_name, room_subject,
+                        json.dumps(members), json.dumps([]),
+                        datetime.now().isoformat(),
+                    ),
+                )
+                for member in members:
+                    cur.execute("DELETE FROM waiting_queue WHERE user_email = ?", (member["email"],))
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO match_results
+                        (user_email, room_code, subject, members, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            member["email"], room_code, room_subject,
+                            json.dumps(members), datetime.now().isoformat(),
+                        ),
+                    )
+                cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
+                conn.commit()
+                return {
+                    "success": True,
+                    "matched": True,
+                    "cross_subject": True,
+                    "partner_subject": partner_subject,
+                    "room_code": room_code,
+                    "subject": room_subject,
+                    "members": members,
+                }
+
             conn.commit()
-
             return {
                 "success": True,
-                "matched": True,
-                "room_code": room_code,
-                "subject": subject,
-                "members": members,
+                "matched": False,
+                "waiting": len(waiting),
+                "message": f"Waiting for a {subject} partner... ({len(waiting)}/2)",
             }
-
-        conn.commit()
-        return {
-            "success": True,
-            "matched": False,
-            "waiting": len(waiting),
-            "message": f"Waiting for another {subject} student... ({len(waiting)}/2)",
-        }
-    except Exception as exc:
-        conn.rollback()
-        return {"success": False, "error": str(exc)}
-    finally:
-        conn.close()
+        except Exception as exc:
+            conn.rollback()
+            return {"success": False, "error": str(exc)}
+        finally:
+            conn.close()
 
 
 @app.post("/match/leave-queue")

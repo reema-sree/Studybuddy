@@ -128,6 +128,7 @@
             completedSeconds: Number(raw?.completedSeconds) || 0,
             completedSessions: Number(raw?.completedSessions) || 0,
             notesShared: Number(raw?.notesShared) || 0,
+            earlyLeaves: Number(raw?.earlyLeaves) || 0,
             studyDates: [...new Set(studyDates)].sort()
         };
     }
@@ -169,10 +170,11 @@
 
     function statPoints(stats) {
         const focusPoints = Math.floor(stats.focusSeconds / 60) * 2;
-        const completionPoints = stats.completedSessions * 50;
+        const completionPoints = stats.completedSessions * 4;   // FIX: was 50, now 4 per session
+        const earlyLeavePoints = (stats.earlyLeaves || 0) * 2; // FIX: 2 points for leaving early
         const dayPoints = stats.studyDates.length * 25;
         const notePoints = stats.notesShared * 10;
-        return focusPoints + completionPoints + dayPoints + notePoints;
+        return focusPoints + completionPoints + earlyLeavePoints + dayPoints + notePoints;
     }
 
     function setStatsText(name, value) {
@@ -346,9 +348,24 @@
 
                     if (data.matched) {
                         stopMatchingUi();
+
+                        // FIX: notify user if matched into a different subject room
+                        if (data.cross_subject) {
+                            const partnerSubject = data.partner_subject || "a different subject";
+                            const go = confirm(
+                                `No ${subject} partners found right now.\n\n` +
+                                `We found a partner studying "${partnerSubject}" instead.\n\n` +
+                                `Join their study room?`
+                            );
+                            if (!go) {
+                                await postJson("/match/leave-queue", { user_email: currentUser.email });
+                                return;
+                            }
+                        }
+
                         window.location.href = buildStudyUrl(data.room_code, {
                             ...currentUser,
-                            subject
+                            subject: data.subject || subject
                         });
                         return;
                     }
@@ -1241,6 +1258,13 @@
 
         function leaveRoom() {
             if (!confirm("Leave this study room?")) return;
+
+            // FIX: if timer was still running, it's an early leave → award 2 points
+            if (timerRunning) {
+                studyStats.earlyLeaves = (studyStats.earlyLeaves || 0) + 1;
+                markStudyDay();
+                saveStudyStats();
+            }
 
             if (socket) {
                 socket.emit("leave_room_signal", {
