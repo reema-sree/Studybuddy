@@ -75,13 +75,105 @@
         return `${safe}-${Date.now()}@guest.local`;
     }
 
-    function makeUser(name, email, verified) {
+    function makeUser(name, email, verified, auth_token = "") {
         return {
             id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             name,
             email: email || guestEmail(name),
-            verified: !!verified
+            verified: !!verified,
+            auth_token: auth_token || ""
         };
+    }
+
+    // --- Server auth helpers ---
+
+    async function registerUser(name, email, password) {
+        const data = await postJson("/auth/register", { name, email, password });
+        if (!data.success) throw new Error(data.error || "Registration failed.");
+        return data;
+    }
+
+    async function loginUser(email, password) {
+        const data = await postJson("/auth/login", { email, password });
+        if (!data.success) throw new Error(data.error || "Login failed.");
+        return data;
+    }
+
+    async function syncStatsToServer(user, stats) {
+        if (!user?.auth_token) return;
+        try {
+            await postJson("/auth/save-stats", {
+                email: user.email,
+                auth_token: user.auth_token,
+                stats
+            });
+        } catch { /* silent — localStorage is the fallback */ }
+    }
+
+    async function syncNotesToServer(user, notes) {
+        if (!user?.auth_token) return;
+        try {
+            await postJson("/auth/save-notes", {
+                email: user.email,
+                auth_token: user.auth_token,
+                notes
+            });
+        } catch { /* silent */ }
+    }
+
+    async function verifyEmailCode(email, code) {
+        const data = await postJson("/auth/verify-email", { email, code });
+        if (!data.success) throw new Error(data.error || "Verification failed.");
+        return data;
+    }
+
+    async function forgotPassword(email) {
+        const data = await postJson("/auth/forgot-password", { email });
+        if (!data.success) throw new Error(data.error || "Could not send reset code.");
+        return data;
+    }
+
+    async function resetPassword(email, code, new_password) {
+        const data = await postJson("/auth/reset-password", { email, code, new_password });
+        if (!data.success) throw new Error(data.error || "Reset failed.");
+        return data;
+    }
+
+    async function restoreFromServer(user) {
+        if (!user?.auth_token) return;
+        try {
+            const res = await fetch(
+                `/auth/profile?email=${encodeURIComponent(user.email)}&auth_token=${encodeURIComponent(user.auth_token)}`
+            );
+            const data = await res.json();
+            if (!data.success) return;
+
+            // Merge server stats with localStorage — take the higher value for each number field
+            const localStats = readStatsForUser(user);
+            const serverStats = cleanStats(data.stats || {});
+            const merged = {
+                focusSeconds:      Math.max(localStats.focusSeconds, serverStats.focusSeconds),
+                completedSeconds:  Math.max(localStats.completedSeconds, serverStats.completedSeconds),
+                completedSessions: Math.max(localStats.completedSessions, serverStats.completedSessions),
+                notesShared:       Math.max(localStats.notesShared, serverStats.notesShared),
+                earlyLeaves:       Math.max(localStats.earlyLeaves || 0, serverStats.earlyLeaves || 0),
+                studyDates:        [...new Set([...localStats.studyDates, ...serverStats.studyDates])].sort()
+            };
+            localStorage.setItem(statsKeyForEmail(user.email), JSON.stringify(merged));
+
+            // Merge notes — combine and deduplicate by createdAt
+            const localNotes = readNotesForUser(user);
+            const serverNotes = Array.isArray(data.notes) ? data.notes : [];
+            const allNotes = [...localNotes, ...serverNotes];
+            const seen = new Set();
+            const mergedNotes = allNotes.filter(n => {
+                const key = n.createdAt || n.title;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).slice(0, 50);
+            localStorage.setItem(notesKeyForEmail(user.email), JSON.stringify(mergedNotes));
+        } catch { /* silent */ }
     }
 
     function fillSubjectSelects() {
@@ -225,7 +317,11 @@
 
         const notes = readNotesForUser(user);
         notes.unshift(note);
-        localStorage.setItem(notesKeyForEmail(user.email), JSON.stringify(notes.slice(0, 24)));
+        const trimmed = notes.slice(0, 50);
+        localStorage.setItem(notesKeyForEmail(user.email), JSON.stringify(trimmed));
+
+        // Sync to server so notes persist across devices
+        if (user?.auth_token) syncNotesToServer(user, trimmed);
     }
 
     function renderNotesHistory(user) {
@@ -290,10 +386,15 @@
             $("verified-badge").classList.toggle("hidden", !currentUser.verified);
         }
 
-        function showAuth() {
+        function showAuth(mode = "login") {
+            authEmail = "";
             $("auth-modal").classList.remove("hidden");
             $("auth-modal").classList.add("active");
-            $("auth-name").focus();
+            switchAuthMode(mode);
+            setTimeout(() => {
+                if (mode === "register") $("auth-name")?.focus();
+                else $("auth-email")?.focus();
+            }, 50);
         }
 
         function closeAuth() {
@@ -301,21 +402,130 @@
             $("auth-modal").classList.add("hidden");
         }
 
+        let authMode   = "login";   // "login" | "register" | "verify" | "forgot" | "reset"
+        let authEmail  = "";         // carries email across steps
+        const AUTH_STEPS = {
+            login:    { title: "Sign In",          copy: "Welcome back.",                              btn: "Sign In" },
+            register: { title: "Create Account",   copy: "Join Study Buddy — it's free.",              btn: "Create Account" },
+            verify:   { title: "Verify Email",     copy: "Enter the 6-digit code sent to your inbox.", btn: "Verify" },
+            forgot:   { title: "Forgot Password",  copy: "Enter your email to receive a reset code.",  btn: "Send Reset Code" },
+            reset:    { title: "Reset Password",   copy: "Enter the code from your email and your new password.", btn: "Reset Password" },
+        };
+
+        function switchAuthMode(mode) {
+            authMode = mode;
+            const step = AUTH_STEPS[mode];
+            $("auth-mode-title").textContent = step.copy;
+            $("auth-submit").textContent     = step.btn;
+            $("auth-submit").disabled        = false;
+            $("auth-error").textContent      = "";
+
+            // show/hide fields per step
+            const show = (id, visible) => $(id) && $(id).classList.toggle("hidden", !visible);
+            show("auth-name",         mode === "register");
+            show("auth-email",        mode === "login" || mode === "register" || mode === "forgot");
+            show("auth-password",     mode === "login" || mode === "register" || mode === "reset");
+            show("auth-code-wrap",    mode === "verify" || mode === "reset");
+            show("auth-newpass-wrap", mode === "reset");
+            show("auth-switch-wrap",  mode === "login" || mode === "register");
+
+            const switchLink = $("auth-switch-link");
+            if (switchLink) switchLink.textContent = mode === "login"
+                ? "No account? Register"
+                : "Already have an account? Sign in";
+
+            const forgotLink = $("auth-forgot-link");
+            if (forgotLink) forgotLink.classList.toggle("hidden", mode !== "login");
+
+            $("auth-modal-title").textContent = step.title;
+        }
+
         async function authenticate() {
-            const name = $("auth-name").value.trim();
-            const email = $("auth-email").value.trim();
+            const name     = ($("auth-name")    ?.value || "").trim();
+            const email    = ($("auth-email")   ?.value || "").trim().toLowerCase() || authEmail;
+            const password = ($("auth-password")?.value || "");
+            const code     = ($("auth-code")    ?.value || "").trim();
+            const newpass  = ($("auth-newpass") ?.value || "");
 
-            if (!name) {
-                alert("Please enter your name.");
-                return;
+            $("auth-submit").disabled    = true;
+            $("auth-submit").textContent = "Please wait...";
+            $("auth-error").textContent  = "";
+
+            try {
+                if (authMode === "login") {
+                    if (!email || !password) throw new Error("Please enter your email and password.");
+                    const result = await loginUser(email, password);
+                    if (result.needs_verification) {
+                        authEmail = email;
+                        switchAuthMode("verify");
+                        return;
+                    }
+                    await _finishAuth(result);
+
+                } else if (authMode === "register") {
+                    if (!name)     throw new Error("Please enter your name.");
+                    if (!email)    throw new Error("Please enter your email.");
+                    if (!password) throw new Error("Please enter a password.");
+                    const result = await registerUser(name, email, password);
+                    authEmail = email;
+                    switchAuthMode("verify");
+
+                } else if (authMode === "verify") {
+                    if (!code) throw new Error("Please enter the 6-digit code.");
+                    const result = await verifyEmailCode(authEmail, code);
+                    await _finishAuth(result);
+
+                } else if (authMode === "forgot") {
+                    if (!email) throw new Error("Please enter your email address.");
+                    authEmail = email;
+                    await forgotPassword(email);
+                    switchAuthMode("reset");
+
+                } else if (authMode === "reset") {
+                    if (!code)   throw new Error("Please enter the reset code.");
+                    if (!newpass) throw new Error("Please enter a new password.");
+                    const result = await resetPassword(authEmail, code, newpass);
+                    await _finishAuth(result);
+                }
+            } catch (err) {
+                $("auth-error").textContent = err.message || "Something went wrong.";
+                $("auth-submit").disabled   = false;
+                $("auth-submit").textContent = AUTH_STEPS[authMode].btn;
             }
+        }
 
-            const verified = await verifyEmail(email);
-            currentUser = makeUser(name, email, verified);
+        async function _finishAuth(result) {
+            currentUser = makeUser(result.user.name, result.user.email, result.user.verified, result.user.auth_token);
             saveUser(currentUser);
+            if (result.stats) {
+                const local  = readStatsForUser(currentUser);
+                const server = cleanStats(result.stats);
+                const merged = {
+                    focusSeconds:      Math.max(local.focusSeconds, server.focusSeconds),
+                    completedSeconds:  Math.max(local.completedSeconds, server.completedSeconds),
+                    completedSessions: Math.max(local.completedSessions, server.completedSessions),
+                    notesShared:       Math.max(local.notesShared, server.notesShared),
+                    earlyLeaves:       Math.max(local.earlyLeaves || 0, server.earlyLeaves || 0),
+                    studyDates:        [...new Set([...local.studyDates, ...(server.studyDates || [])])].sort()
+                };
+                localStorage.setItem(statsKeyForEmail(currentUser.email), JSON.stringify(merged));
+            }
+            if (Array.isArray(result.notes) && result.notes.length) {
+                const local = readNotesForUser(currentUser);
+                const all   = [...local, ...result.notes];
+                const seen  = new Set();
+                const merged = all.filter(n => {
+                    const key = n.createdAt || n.title;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                }).slice(0, 50);
+                localStorage.setItem(notesKeyForEmail(currentUser.email), JSON.stringify(merged));
+            }
             updateUserUi();
             closeAuth();
         }
+
 
         function stopMatchingUi() {
             isMatching = false;
@@ -466,9 +676,17 @@
             }
         }
 
-        $("signin-btn").addEventListener("click", showAuth);
+        $("signin-btn").addEventListener("click", () => showAuth("login"));
         $("auth-cancel").addEventListener("click", closeAuth);
         $("auth-submit").addEventListener("click", authenticate);
+        $("auth-switch-link").addEventListener("click", (e) => {
+            e.preventDefault();
+            switchAuthMode(authMode === "login" ? "register" : "login");
+        });
+        $("auth-forgot-link").addEventListener("click", (e) => {
+            e.preventDefault();
+            switchAuthMode("forgot");
+        });
         $("auth-modal").addEventListener("click", (event) => {
             if (event.target.id === "auth-modal") closeAuth();
         });
@@ -504,50 +722,111 @@
     }
 
     function initLogin() {
+        let loginMode  = "login";
+        let loginEmail = "";
+        const STEPS = {
+            login:    { title: "Sign In",         copy: "Welcome back.",                              btn: "Sign In" },
+            register: { title: "Create Account",  copy: "Join Study Buddy — it's free.",             btn: "Create Account" },
+            verify:   { title: "Verify Email",    copy: "Enter the 6-digit code sent to your inbox.", btn: "Verify" },
+            forgot:   { title: "Forgot Password", copy: "Enter your email for a reset code.",         btn: "Send Reset Code" },
+            reset:    { title: "Reset Password",  copy: "Enter the code and your new password.",      btn: "Reset Password" },
+        };
+
+        function switchLoginMode(mode) {
+            loginMode = mode;
+            const step = STEPS[mode];
+            $("login-title").textContent = step.title;
+            $("login-copy") && ($("login-copy").textContent = step.copy);
+            $("login-submit").textContent = step.btn;
+            $("login-submit").disabled    = false;
+            $("login-error").textContent  = "";
+
+            const show = (id, v) => $(id) && $(id).classList.toggle("hidden", !v);
+            show("login-name-wrap",    mode === "register");
+            show("login-email",        mode === "login" || mode === "register" || mode === "forgot");
+            show("login-password",     mode === "login" || mode === "register" || mode === "reset");
+            show("login-code-wrap",    mode === "verify" || mode === "reset");
+            show("login-newpass-wrap", mode === "reset");
+
+            const sw = $("login-switch-link");
+            if (sw) sw.textContent = mode === "login" ? "No account yet? Register" : "Back to sign in";
+            const fg = $("login-forgot-link");
+            if (fg) fg.classList.toggle("hidden", mode !== "login");
+        }
+
         async function submitLogin() {
-            const name = $("login-name").value.trim();
-            const email = $("login-email").value.trim();
+            const name    = ($("login-name")   ?.value || "").trim();
+            const email   = ($("login-email")  ?.value || "").trim().toLowerCase() || loginEmail;
+            const pass    = ($("login-password")?.value || "");
+            const code    = ($("login-code")   ?.value || "").trim();
+            const newpass = ($("login-newpass") ?.value || "");
 
-            if (!name) {
-                alert("Please enter your name.");
-                return;
+            $("login-submit").disabled    = true;
+            $("login-submit").textContent = "Please wait...";
+            $("login-error").textContent  = "";
+
+            try {
+                let result;
+                if (loginMode === "login") {
+                    if (!email || !pass) throw new Error("Please enter your email and password.");
+                    result = await loginUser(email, pass);
+                    if (result.needs_verification) { loginEmail = email; switchLoginMode("verify"); return; }
+
+                } else if (loginMode === "register") {
+                    if (!name)  throw new Error("Please enter your name.");
+                    if (!email) throw new Error("Please enter your email.");
+                    if (!pass)  throw new Error("Please enter a password.");
+                    await registerUser(name, email, pass);
+                    loginEmail = email;
+                    switchLoginMode("verify");
+                    return;
+
+                } else if (loginMode === "verify") {
+                    if (!code) throw new Error("Please enter the 6-digit code.");
+                    result = await verifyEmailCode(loginEmail, code);
+
+                } else if (loginMode === "forgot") {
+                    if (!email) throw new Error("Please enter your email address.");
+                    loginEmail = email;
+                    await forgotPassword(email);
+                    switchLoginMode("reset");
+                    return;
+
+                } else if (loginMode === "reset") {
+                    if (!code)   throw new Error("Please enter the reset code.");
+                    if (!newpass) throw new Error("Please enter a new password.");
+                    result = await resetPassword(loginEmail, code, newpass);
+                }
+
+                // Success — save user and restore from server
+                const user = makeUser(result.user.name, result.user.email, result.user.verified, result.user.auth_token);
+                saveUser(user);
+                await restoreFromServer(user);
+
+                const params = new URLSearchParams(window.location.search);
+                window.location.href = params.get("next") || "/";
+
+            } catch (err) {
+                $("login-error").textContent  = err.message || "Something went wrong.";
+                $("login-submit").disabled    = false;
+                $("login-submit").textContent = STEPS[loginMode].btn;
             }
-
-            const verified = await verifyEmail(email);
-            const user = makeUser(name, email, verified);
-            saveUser(user);
-
-            const params = new URLSearchParams(window.location.search);
-            window.location.href = params.get("next") || "/";
         }
 
         $("login-submit").addEventListener("click", submitLogin);
-        ["login-name", "login-email"].forEach((id) => {
-            $(id).addEventListener("keydown", (event) => {
-                if (event.key === "Enter") submitLogin();
-            });
+        $("login-switch-link")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            switchLoginMode(loginMode === "login" ? "register" : "login");
+        });
+        $("login-forgot-link")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            switchLoginMode("forgot");
+        });
+        ["login-email", "login-password", "login-code", "login-newpass"].forEach((id) => {
+            $(id)?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
         });
     }
 
-    function initRoomRedirect() {
-        const params = new URLSearchParams(window.location.search);
-        const parts = window.location.pathname.split("/").filter(Boolean);
-        const pathRoomCode = parts[0] === "room" ? parts[1] : "";
-        const roomCode = (params.get("room") || pathRoomCode || "").toUpperCase();
-
-        if (!roomCode) {
-            window.location.replace("/");
-            return;
-        }
-
-        const user = getUser();
-        if (!user) {
-            window.location.replace(`/login?next=${encodeURIComponent(`/room/${roomCode}`)}`);
-            return;
-        }
-
-        window.location.replace(buildStudyUrl(roomCode, user));
-    }
 
     function initStudy() {
         const params = new URLSearchParams(window.location.search);
@@ -595,6 +874,9 @@
 
         function saveStudyStats() {
             localStorage.setItem(statsStorageKey, JSON.stringify(studyStats));
+            // Sync to server so stats persist across devices
+            const user = getUser();
+            if (user?.auth_token) syncStatsToServer(user, studyStats);
         }
 
         function markStudyDay() {

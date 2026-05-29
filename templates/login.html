@@ -100,16 +100,35 @@
             <div class="brand" style="margin-bottom: 28px;">
                 <div class="brand-mark">SB</div>
                 <div>
-                    <h1 class="brand-title">Study Buddy</h1>
-                    <p class="brand-subtitle">Sign in to continue</p>
+                    <h1 id="login-title" class="brand-title">Sign In</h1>
+                    <p id="login-copy" class="brand-subtitle">Welcome back to Study Buddy</p>
                 </div>
             </div>
             <div class="field-stack">
-                <input id="login-name" class="input" type="text" placeholder="Full name" autocomplete="name">
+                <!-- Register only -->
+                <div id="login-name-wrap" class="hidden">
+                    <input id="login-name" class="input" type="text" placeholder="Full name" autocomplete="name">
+                </div>
+                <!-- Login + Register + Forgot -->
                 <input id="login-email" class="input" type="email" placeholder="Email address" autocomplete="email">
+                <!-- Login + Register + Reset -->
+                <input id="login-password" class="input" type="password" placeholder="Password" autocomplete="current-password">
+                <!-- Verify + Reset -->
+                <div id="login-code-wrap" class="hidden">
+                    <input id="login-code" class="input" type="text" placeholder="6-digit code" maxlength="6" style="letter-spacing:0.2em;font-size:18px;text-align:center;">
+                </div>
+                <!-- Reset new password -->
+                <div id="login-newpass-wrap" class="hidden">
+                    <input id="login-newpass" class="input" type="password" placeholder="New password (min 6 characters)">
+                </div>
+                <p id="login-error" style="color:#f87171;font-size:13px;min-height:18px;margin:0;"></p>
                 <button id="login-submit" class="btn btn-primary">Sign In</button>
             </div>
-            <p class="queue-note"><a href="/">← Back to home</a></p>
+            <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;align-items:center;">
+                <a id="login-switch-link" href="#" onclick="return false;" class="queue-note" style="color:#f0a030;">No account yet? Register</a>
+                <a id="login-forgot-link" href="#" onclick="return false;" class="queue-note">Forgot password?</a>
+                <a href="/" class="queue-note">← Back to home</a>
+            </div>
         </section>
     </main>
     <script src="/static/js/app.js"></script>

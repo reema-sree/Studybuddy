@@ -6,6 +6,13 @@ import os
 import random
 import sqlite3
 import string
+import uuid
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+import bcrypt
 
 # Global lock — prevents two simultaneous polls from creating two separate rooms
 _match_lock = asyncio.Lock()
@@ -27,6 +34,9 @@ STATIC_DIR = BASE_DIR / "static"
 DB_PATH = BASE_DIR / "studybuddy.db"
 
 load_dotenv(BASE_DIR / ".env")
+
+gmail_user     = os.getenv("GMAIL_USER", "")
+gmail_password = os.getenv("GMAIL_APP_PASSWORD", "")
 
 gemini_key = os.getenv("GEMINI_KEY")
 gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -58,6 +68,31 @@ room_connections = {}
 sid_index = {}
 
 
+
+def make_code(length=6):
+    return "".join(random.choices(string.digits, k=length))
+
+
+def send_email(to_email, subject, html_body):
+    if not gmail_user or not gmail_password:
+        print("Gmail not configured - skipping email send.")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"Study Buddy <{gmail_user}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(html_body, "html"))
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as server:
+            server.login(gmail_user, gmail_password)
+            server.sendmail(gmail_user, to_email, msg.as_string())
+        return True
+    except Exception as exc:
+        print(f"Email send failed: {exc}")
+        return False
+
+
 def connect_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -71,6 +106,24 @@ def make_room_code():
 def init_db():
     conn = connect_db()
     cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            email               TEXT PRIMARY KEY,
+            name                TEXT NOT NULL,
+            password_hash       BLOB NOT NULL,
+            auth_token          TEXT,
+            email_verified      INTEGER DEFAULT 0,
+            verification_code   TEXT,
+            verification_expires TEXT,
+            reset_code          TEXT,
+            reset_expires       TEXT,
+            stats               TEXT DEFAULT '{}',
+            notes               TEXT DEFAULT '[]',
+            created_at          TEXT,
+            last_login          TEXT
+        )
+    """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS rooms (
@@ -300,13 +353,351 @@ async def chat_message_socket(sid, data):
     await sio.emit("new-message", msg, room=room_code)
 
 
+
+def _verification_email(name, code):
+    return f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0b0f1a;color:#dce6f5;border-radius:16px;">
+        <h2 style="color:#f0a030;margin-bottom:8px;">Study Buddy</h2>
+        <p>Hi {name},</p>
+        <p>Your email verification code is:</p>
+        <div style="font-size:36px;font-weight:900;letter-spacing:12px;color:#f0a030;background:#18202f;padding:20px;border-radius:12px;text-align:center;margin:24px 0;">
+            {code}
+        </div>
+        <p style="color:#5a6a85;font-size:13px;">This code expires in 15 minutes. If you didn't register, ignore this email.</p>
+    </div>
+    """
+
+
+def _reset_email(name, code):
+    return f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0b0f1a;color:#dce6f5;border-radius:16px;">
+        <h2 style="color:#f0a030;margin-bottom:8px;">Study Buddy</h2>
+        <p>Hi {name},</p>
+        <p>Your password reset code is:</p>
+        <div style="font-size:36px;font-weight:900;letter-spacing:12px;color:#f87171;background:#18202f;padding:20px;border-radius:12px;text-align:center;margin:24px 0;">
+            {code}
+        </div>
+        <p style="color:#5a6a85;font-size:13px;">This code expires in 15 minutes. If you didn't request this, ignore this email.</p>
+    </div>
+    """
+
+
+EDU_MARKERS = [".edu", ".ac.uk", ".edu.in", "student.", "university.", "college.", ".ac."]
+
+
+def is_verified(email: str) -> bool:
+    return any(marker in email for marker in EDU_MARKERS)
+
+
+def check_auth(cur, email: str, auth_token: str):
+    """Returns user row if token is valid, else None."""
+    cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cur.fetchone()
+    if not user or user["auth_token"] != auth_token:
+        return None
+    return user
+
+
+@app.post("/auth/register")
+async def register(request: Request):
+    data = await request.json()
+    name     = (data.get("name") or "").strip()
+    email    = (data.get("email") or "").lower().strip()
+    password = (data.get("password") or "").strip()
+
+    if not name or not email or not password:
+        return {"success": False, "error": "Name, email and password are all required."}
+    if len(password) < 6:
+        return {"success": False, "error": "Password must be at least 6 characters."}
+
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    now  = datetime.now().isoformat()
+    code = make_code()
+    # Code expires in 15 minutes
+    from datetime import timedelta
+    expires = (datetime.now() + timedelta(minutes=15)).isoformat()
+
+    conn = connect_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT email, email_verified FROM users WHERE email = ?", (email,))
+        existing = cur.fetchone()
+
+        if existing:
+            if existing["email_verified"]:
+                return {"success": False, "error": "Account already exists. Please sign in."}
+            else:
+                # Re-send verification code for unverified account
+                cur.execute(
+                    "UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
+                    (code, expires, email)
+                )
+                conn.commit()
+                send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+                return {"success": True, "needs_verification": True, "email": email,
+                        "message": "Verification code resent. Check your inbox."}
+
+        cur.execute(
+            """INSERT INTO users
+               (email, name, password_hash, auth_token, email_verified,
+                verification_code, verification_expires,
+                stats, notes, created_at, last_login)
+               VALUES (?,?,?,?,0,?,?,?,?,?,?)""",
+            (email, name, password_hash, "", code, expires, "{}", "[]", now, now)
+        )
+        conn.commit()
+
+        send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+        return {"success": True, "needs_verification": True, "email": email,
+                "message": "Check your email for the 6-digit verification code."}
+    except Exception as exc:
+        conn.rollback()
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/login")
+async def auth_login(request: Request):
+    data     = await request.json()
+    email    = (data.get("email") or "").lower().strip()
+    password = (data.get("password") or "").strip()
+
+    if not email or not password:
+        return {"success": False, "error": "Email and password are required."}
+
+    conn = connect_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cur.fetchone()
+
+        if not user:
+            return {"success": False, "error": "No account found. Please register first."}
+        if not bcrypt.checkpw(password.encode(), user["password_hash"]):
+            return {"success": False, "error": "Incorrect password. Please try again."}
+        if not user["email_verified"]:
+            # Resend verification code
+            from datetime import timedelta
+            code    = make_code()
+            expires = (datetime.now() + timedelta(minutes=15)).isoformat()
+            cur.execute("UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
+                        (code, expires, email))
+            conn.commit()
+            send_email(email, "Study Buddy — Verify your email",
+                       _verification_email(user["name"], code))
+            return {"success": True, "needs_verification": True, "email": email,
+                    "message": "Your email is not verified. A new code has been sent."}
+
+        auth_token = str(uuid.uuid4())
+        cur.execute("UPDATE users SET auth_token=?, last_login=? WHERE email=?",
+                    (auth_token, datetime.now().isoformat(), email))
+        conn.commit()
+
+        return {
+            "success": True,
+            "user": {"name": user["name"], "email": email,
+                     "verified": is_verified(email), "auth_token": auth_token},
+            "stats": json.loads(user["stats"] or "{}"),
+            "notes": json.loads(user["notes"] or "[]")
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/verify-email")
+async def verify_email_code(request: Request):
+    data  = await request.json()
+    email = (data.get("email") or "").lower().strip()
+    code  = (data.get("code") or "").strip()
+
+    conn = connect_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cur.fetchone()
+
+        if not user:
+            return {"success": False, "error": "Account not found."}
+        if user["email_verified"]:
+            return {"success": False, "error": "Email already verified. Please sign in."}
+        if user["verification_code"] != code:
+            return {"success": False, "error": "Incorrect code. Please try again."}
+        if datetime.now().isoformat() > user["verification_expires"]:
+            return {"success": False, "error": "Code expired. Please register again to get a new code."}
+
+        auth_token = str(uuid.uuid4())
+        cur.execute(
+            "UPDATE users SET email_verified=1, auth_token=?, verification_code=NULL, verification_expires=NULL WHERE email=?",
+            (auth_token, email)
+        )
+        conn.commit()
+
+        return {
+            "success": True,
+            "user": {"name": user["name"], "email": email,
+                     "verified": is_verified(email), "auth_token": auth_token},
+            "stats": json.loads(user["stats"] or "{}"),
+            "notes": json.loads(user["notes"] or "[]")
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/forgot-password")
+async def forgot_password(request: Request):
+    data  = await request.json()
+    email = (data.get("email") or "").lower().strip()
+
+    if not email:
+        return {"success": False, "error": "Please enter your email address."}
+
+    conn = connect_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT name, email_verified FROM users WHERE email = ?", (email,))
+        user = cur.fetchone()
+
+        if not user:
+            # Don't reveal whether account exists
+            return {"success": True, "message": "If an account exists, a reset code has been sent."}
+
+        from datetime import timedelta
+        code    = make_code()
+        expires = (datetime.now() + timedelta(minutes=15)).isoformat()
+
+        cur.execute("UPDATE users SET reset_code=?, reset_expires=? WHERE email=?",
+                    (code, expires, email))
+        conn.commit()
+
+        send_email(email, "Study Buddy — Password Reset", _reset_email(user["name"], code))
+        return {"success": True, "message": "Reset code sent. Check your inbox."}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/reset-password")
+async def reset_password(request: Request):
+    data         = await request.json()
+    email        = (data.get("email") or "").lower().strip()
+    code         = (data.get("code") or "").strip()
+    new_password = (data.get("new_password") or "").strip()
+
+    if not email or not code or not new_password:
+        return {"success": False, "error": "All fields are required."}
+    if len(new_password) < 6:
+        return {"success": False, "error": "Password must be at least 6 characters."}
+
+    conn = connect_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cur.fetchone()
+
+        if not user or user["reset_code"] != code:
+            return {"success": False, "error": "Invalid or expired reset code."}
+        if datetime.now().isoformat() > (user["reset_expires"] or ""):
+            return {"success": False, "error": "Reset code expired. Please request a new one."}
+
+        new_hash   = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())
+        auth_token = str(uuid.uuid4())
+        cur.execute(
+            "UPDATE users SET password_hash=?, auth_token=?, email_verified=1, reset_code=NULL, reset_expires=NULL WHERE email=?",
+            (new_hash, auth_token, email)
+        )
+        conn.commit()
+
+        return {
+            "success": True,
+            "user": {"name": user["name"], "email": email,
+                     "verified": is_verified(email), "auth_token": auth_token},
+            "stats": json.loads(user["stats"] or "{}"),
+            "notes": json.loads(user["notes"] or "[]")
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/save-stats")
+async def save_stats(request: Request):
+    data = await request.json()
+    email = (data.get("email") or "").lower().strip()
+    auth_token = (data.get("auth_token") or "").strip()
+    stats = data.get("stats") or {}
+
+    conn = connect_db()
+    cur = conn.cursor()
+    try:
+        if not check_auth(cur, email, auth_token):
+            return {"success": False, "error": "Unauthorized."}
+
+        cur.execute("UPDATE users SET stats = ? WHERE email = ?", (json.dumps(stats), email))
+        conn.commit()
+        return {"success": True}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/save-notes")
+async def save_notes(request: Request):
+    data = await request.json()
+    email = (data.get("email") or "").lower().strip()
+    auth_token = (data.get("auth_token") or "").strip()
+    notes = data.get("notes") or []
+
+    conn = connect_db()
+    cur = conn.cursor()
+    try:
+        if not check_auth(cur, email, auth_token):
+            return {"success": False, "error": "Unauthorized."}
+
+        cur.execute("UPDATE users SET notes = ? WHERE email = ?", (json.dumps(notes), email))
+        conn.commit()
+        return {"success": True}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@app.get("/auth/profile")
+async def get_profile(email: str, auth_token: str):
+    conn = connect_db()
+    cur = conn.cursor()
+    try:
+        user = check_auth(cur, email.lower().strip(), auth_token.strip())
+        if not user:
+            return {"success": False, "error": "Unauthorized."}
+
+        return {
+            "success": True,
+            "name": user["name"],
+            "stats": json.loads(user["stats"] or "{}"),
+            "notes": json.loads(user["notes"] or "[]")
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
 @app.get("/")
 async def home():
     return template("home.html")
 
 
 @app.get("/login")
-async def login():
+async def login_page():
     return template("login.html")
 
 

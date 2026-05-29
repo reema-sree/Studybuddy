@@ -557,13 +557,35 @@
 
     <div id="auth-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
         <div class="modal-card">
-            <h2 id="auth-modal-title" class="panel-title">Welcome to Study Buddy</h2>
-            <p class="panel-copy">Enter your details to start studying.</p>
+            <h2 id="auth-modal-title" class="panel-title">Sign In</h2>
+            <p id="auth-mode-title" class="panel-copy">Welcome back.</p>
             <div class="field-stack">
-                <input id="auth-name" class="input" type="text" placeholder="Full name" autocomplete="name">
+                <!-- Register only -->
+                <input id="auth-name" class="input hidden" type="text" placeholder="Full name" autocomplete="name">
+                <!-- Login + Register + Forgot -->
                 <input id="auth-email" class="input" type="email" placeholder="Email address" autocomplete="email">
-                <button id="auth-submit" class="btn btn-primary">Start Studying</button>
+                <!-- Login + Register + Reset -->
+                <input id="auth-password" class="input" type="password" placeholder="Password (min 6 characters)" autocomplete="current-password">
+                <!-- Verify + Reset -->
+                <div id="auth-code-wrap" class="hidden">
+                    <input id="auth-code" class="input" type="text" placeholder="6-digit code" maxlength="6" style="letter-spacing:0.2em;font-size:18px;text-align:center;">
+                </div>
+                <!-- Reset only -->
+                <div id="auth-newpass-wrap" class="hidden">
+                    <input id="auth-newpass" class="input" type="password" placeholder="New password (min 6 characters)">
+                </div>
+                <!-- Error message -->
+                <p id="auth-error" style="color:#f87171;font-size:13px;min-height:18px;margin:0;"></p>
+                <button id="auth-submit" class="btn btn-primary">Sign In</button>
                 <button id="auth-cancel" class="btn btn-ghost">Cancel</button>
+                <!-- Toggle register/login -->
+                <div id="auth-switch-wrap" style="text-align:center;font-size:12px;color:#5a6a85;">
+                    <a id="auth-switch-link" href="#" style="color:#f0a030;text-decoration:none;">No account? Register</a>
+                </div>
+                <!-- Forgot password -->
+                <div style="text-align:center;font-size:12px;">
+                    <a id="auth-forgot-link" href="#" style="color:#5a6a85;text-decoration:none;">Forgot password?</a>
+                </div>
             </div>
         </div>
     </div>
