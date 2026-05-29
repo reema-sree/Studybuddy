@@ -8,6 +8,7 @@ import sqlite3
 import string
 import uuid
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -82,9 +83,8 @@ def send_email(to_email, subject, html_body):
         msg["From"]    = f"Study Buddy <{gmail_user}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.ehlo()
-            server.starttls()
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as server:
             server.login(gmail_user, gmail_password)
             server.sendmail(gmail_user, to_email, msg.as_string())
         return True
@@ -442,14 +442,32 @@ async def register(request: Request):
                (email, name, password_hash, auth_token, email_verified,
                 verification_code, verification_expires,
                 stats, notes, created_at, last_login)
-               VALUES (?,?,?,?,0,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,1,?,?,?,?,?,?)""",
             (email, name, password_hash, "", code, expires, "{}", "[]", now, now)
         )
         conn.commit()
 
-        send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
-        return {"success": True, "needs_verification": True, "email": email,
-                "message": "Check your email for the 6-digit verification code."}
+        # NOTE: email verification is disabled for local testing.
+        # Change email_verified back to 0 and uncomment send_email before deploying to Railway.
+        # send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+
+        # Auto-login after register since verification is skipped
+        auth_token = str(uuid.uuid4())
+        cur.execute("UPDATE users SET auth_token=? WHERE email=?", (auth_token, email))
+        conn.commit()
+
+        return {
+            "success": True,
+            "needs_verification": False,
+            "user": {
+                "name": name,
+                "email": email,
+                "verified": is_verified(email),
+                "auth_token": auth_token
+            },
+            "stats": {},
+            "notes": []
+        }
     except Exception as exc:
         conn.rollback()
         return {"success": False, "error": str(exc)}

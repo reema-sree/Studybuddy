@@ -467,8 +467,13 @@
                     if (!email)    throw new Error("Please enter your email.");
                     if (!password) throw new Error("Please enter a password.");
                     const result = await registerUser(name, email, password);
-                    authEmail = email;
-                    switchAuthMode("verify");
+                    if (result.needs_verification === false && result.user) {
+                        // Email verification disabled — log straight in
+                        await _finishAuth(result);
+                    } else {
+                        authEmail = email;
+                        switchAuthMode("verify");
+                    }
 
                 } else if (authMode === "verify") {
                     if (!code) throw new Error("Please enter the 6-digit code.");
@@ -776,10 +781,14 @@
                     if (!name)  throw new Error("Please enter your name.");
                     if (!email) throw new Error("Please enter your email.");
                     if (!pass)  throw new Error("Please enter a password.");
-                    await registerUser(name, email, pass);
-                    loginEmail = email;
-                    switchLoginMode("verify");
-                    return;
+                    const regResult = await registerUser(name, email, pass);
+                    if (regResult.needs_verification === false && regResult.user) {
+                        result = regResult;
+                    } else {
+                        loginEmail = email;
+                        switchLoginMode("verify");
+                        return;
+                    }
 
                 } else if (loginMode === "verify") {
                     if (!code) throw new Error("Please enter the 6-digit code.");
