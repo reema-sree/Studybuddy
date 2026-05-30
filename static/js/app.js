@@ -695,8 +695,8 @@
         $("auth-modal").addEventListener("click", (event) => {
             if (event.target.id === "auth-modal") closeAuth();
         });
-        ["auth-name", "auth-email"].forEach((id) => {
-            $(id).addEventListener("keydown", (event) => {
+        ["auth-name", "auth-email", "auth-password", "auth-code", "auth-newpass"].forEach((id) => {
+            $(id) && $(id).addEventListener("keydown", (event) => {
                 if (event.key === "Enter") authenticate();
             });
         });
@@ -836,6 +836,29 @@
         });
     }
 
+
+    function initRoomRedirect() {
+        // Handles /room/{code} URLs — reads room code from path,
+        // gets saved user and redirects to the study page with all params.
+        const user = getUser();
+        const parts = window.location.pathname.split("/").filter(Boolean);
+        const roomCode = (parts[parts.length - 1] || "").toUpperCase();
+
+        if (!roomCode) {
+            window.location.replace("/");
+            return;
+        }
+
+        if (!user || !user.name || !user.email) {
+            window.location.replace(`/login?next=${encodeURIComponent(window.location.href)}`);
+            return;
+        }
+
+        window.location.replace(buildStudyUrl(roomCode, {
+            ...user,
+            subject: user.subject || "Private Study"
+        }));
+    }
 
     function initStudy() {
         const params = new URLSearchParams(window.location.search);
@@ -1052,6 +1075,15 @@
             const box = $(id);
             if (!box) return;
 
+            // FIX: ontrack fires once per track (video + audio separately).
+            // Reuse existing video element instead of wiping the box each time.
+            const existingVideo = box.querySelector("video");
+            if (existingVideo) {
+                existingVideo.srcObject = stream;
+                existingVideo.play().catch(() => {});
+                return;
+            }
+
             box.innerHTML = "";
 
             const video = document.createElement("video");
@@ -1065,6 +1097,9 @@
 
             box.appendChild(video);
             box.appendChild(label);
+
+            // FIX: handle browser autoplay policy
+            video.play().catch(() => {});
         }
 
         function removePeer(peerEmail) {
@@ -1101,9 +1136,11 @@
             }
 
             pc.ontrack = (event) => {
-                if (event.streams && event.streams[0]) {
-                    attachStreamToPlaceholder(peer.email, event.streams[0]);
-                }
+                // FIX: handle case where event.streams[0] is missing (some browsers)
+                const stream = (event.streams && event.streams[0])
+                    ? event.streams[0]
+                    : new MediaStream([event.track]);
+                attachStreamToPlaceholder(peer.email, stream);
             };
 
             pc.onicecandidate = (event) => {

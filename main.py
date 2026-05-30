@@ -83,8 +83,9 @@ def send_email(to_email, subject, html_body):
         msg["From"]    = f"Study Buddy <{gmail_user}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.ehlo()
+            server.starttls()
             server.login(gmail_user, gmail_password)
             server.sendmail(gmail_user, to_email, msg.as_string())
         return True
@@ -158,6 +159,25 @@ def init_db():
     """)
 
     conn.commit()
+
+    # Migrate existing DB — add new columns if they don't exist yet
+    migration_columns = [
+        ("users", "email_verified INTEGER DEFAULT 0"),
+        ("users", "verification_code TEXT"),
+        ("users", "verification_expires TEXT"),
+        ("users", "reset_code TEXT"),
+        ("users", "reset_expires TEXT"),
+        ("users", "auth_token TEXT"),
+        ("users", "stats TEXT DEFAULT '{}'"),
+        ("users", "notes TEXT DEFAULT '[]'"),
+    ]
+    for table, col_def in migration_columns:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
     conn.close()
 
 
@@ -442,32 +462,14 @@ async def register(request: Request):
                (email, name, password_hash, auth_token, email_verified,
                 verification_code, verification_expires,
                 stats, notes, created_at, last_login)
-               VALUES (?,?,?,?,1,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,0,?,?,?,?,?,?)""",
             (email, name, password_hash, "", code, expires, "{}", "[]", now, now)
         )
         conn.commit()
 
-        # NOTE: email verification is disabled for local testing.
-        # Change email_verified back to 0 and uncomment send_email before deploying to Railway.
-        # send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
-
-        # Auto-login after register since verification is skipped
-        auth_token = str(uuid.uuid4())
-        cur.execute("UPDATE users SET auth_token=? WHERE email=?", (auth_token, email))
-        conn.commit()
-
-        return {
-            "success": True,
-            "needs_verification": False,
-            "user": {
-                "name": name,
-                "email": email,
-                "verified": is_verified(email),
-                "auth_token": auth_token
-            },
-            "stats": {},
-            "notes": []
-        }
+        send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+        return {"success": True, "needs_verification": True, "email": email,
+                "message": "Check your email for the 6-digit verification code."}
     except Exception as exc:
         conn.rollback()
         return {"success": False, "error": str(exc)}
@@ -865,13 +867,25 @@ async def join_queue(request: Request):
             existing = cur.fetchone()
 
             if existing:
+                subject_val  = existing["subject"] or ""
+                cross_subject = " / " in subject_val
+                partner_subject = ""
+                if cross_subject:
+                    try:
+                        ex_members = json.loads(existing["members"] or "[]")
+                        partner_subjects = [m["subject"] for m in ex_members if m.get("email") != user_email]
+                        partner_subject = partner_subjects[0] if partner_subjects else ""
+                    except Exception:
+                        pass
                 cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
                 conn.commit()
                 return {
                     "success": True,
                     "matched": True,
+                    "cross_subject": cross_subject,
+                    "partner_subject": partner_subject,
                     "room_code": existing["room_code"],
-                    "subject": existing["subject"],
+                    "subject": subject_val,
                     "members": json.loads(existing["members"] or "[]"),
                 }
 
@@ -1140,6 +1154,21 @@ async def get_messages(room_code: str):
     conn.close()
 
     return {"success": True, "messages": json.loads(room["messages"] or "[]") if room else []}
+
+
+@app.get("/debug/reset-db")
+async def reset_db():
+    """One-time DB wipe endpoint. Remove from production after use!"""
+    conn = connect_db()
+    cur  = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS users")
+    cur.execute("DROP TABLE IF EXISTS rooms")
+    cur.execute("DROP TABLE IF EXISTS waiting_queue")
+    cur.execute("DROP TABLE IF EXISTS match_results")
+    conn.commit()
+    conn.close()
+    init_db()
+    return {"success": True, "message": "Database wiped and recreated. Remove this endpoint now!"}
 
 
 if __name__ == "__main__":
