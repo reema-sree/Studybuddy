@@ -893,6 +893,8 @@
         const peerConnections = {};
         const pendingCandidates = {};
         const peerNames = {};
+        const remoteStreams = {}; // track remote streams per peer email to prevent overwriting
+        const makingOfferMap = {}; // prevent glare (simultaneous WebRTC offers)
 
         $("room-code-display").textContent = roomCode;
 
@@ -1075,11 +1077,11 @@
             const box = $(id);
             if (!box) return;
 
-            // FIX: ontrack fires once per track (video + audio separately).
-            // Reuse existing video element instead of wiping the box each time.
             const existingVideo = box.querySelector("video");
             if (existingVideo) {
-                existingVideo.srcObject = stream;
+                if (existingVideo.srcObject !== stream) {
+                    existingVideo.srcObject = stream;
+                }
                 existingVideo.play().catch(() => {});
                 return;
             }
@@ -1098,7 +1100,6 @@
             box.appendChild(video);
             box.appendChild(label);
 
-            // FIX: handle browser autoplay policy
             video.play().catch(() => {});
         }
 
@@ -1109,6 +1110,7 @@
             }
 
             delete pendingCandidates[peerEmail];
+            delete remoteStreams[peerEmail];
 
             const box = $(`remote-${idFromEmail(peerEmail)}`);
             if (box) box.remove();
@@ -1136,11 +1138,11 @@
             }
 
             pc.ontrack = (event) => {
-                // FIX: handle case where event.streams[0] is missing (some browsers)
-                const stream = (event.streams && event.streams[0])
-                    ? event.streams[0]
-                    : new MediaStream([event.track]);
-                attachStreamToPlaceholder(peer.email, stream);
+                if (!remoteStreams[peer.email]) {
+                    remoteStreams[peer.email] = new MediaStream();
+                }
+                remoteStreams[peer.email].addTrack(event.track);
+                attachStreamToPlaceholder(peer.email, remoteStreams[peer.email]);
             };
 
             pc.onicecandidate = (event) => {
@@ -1155,16 +1157,9 @@
                 });
             };
 
-            // FIX: renegotiate when tracks are added after peer connection is created
-            // (happens when camera permission is granted after socket connects)
             pc.onnegotiationneeded = async () => {
-                if (pc.signalingState !== "stable") return;
-                if (!pc.__offerStarted) return; // only the offerer renegotiates
-                try {
-                    pc.__offerStarted = false; // reset so makeOffer can re-run
+                if (userEmail < peer.email) {
                     await makeOffer(peer);
-                } catch (err) {
-                    console.warn("Renegotiation failed", err);
                 }
             };
 
@@ -1186,27 +1181,32 @@
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                 } catch (err) {
-                    console.warn("Could not add ICE candidate", err);
+                    console.warn("Could not add ICE candidate from pending list", err);
                 }
             }
         }
 
         async function makeOffer(peer) {
             const pc = ensurePeer(peer);
-            if (pc.__offerStarted) return;
+            if (makingOfferMap[peer.email] || pc.signalingState !== "stable") return;
 
-            pc.__offerStarted = true;
+            try {
+                makingOfferMap[peer.email] = true;
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
 
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            socket.emit("webrtc_offer", {
-                room_code: roomCode,
-                target: peer.email,
-                offer: pc.localDescription,
-                from_name: userName,
-                from_email: userEmail
-            });
+                socket.emit("webrtc_offer", {
+                    room_code: roomCode,
+                    target: peer.email,
+                    offer: pc.localDescription,
+                    from_name: userName,
+                    from_email: userEmail
+                });
+            } catch (err) {
+                console.warn("Error creating offer", err);
+            } finally {
+                makingOfferMap[peer.email] = false;
+            }
         }
 
         async function handleRoomUsers(data) {
@@ -1223,14 +1223,6 @@
                 if (!peer.email || peer.email === userEmail) continue;
 
                 ensurePeer(peer);
-
-                if (userEmail < peer.email) {
-                    try {
-                        await makeOffer(peer);
-                    } catch (err) {
-                        console.warn("Offer failed", err);
-                    }
-                }
             }
 
             updateGridClass();
@@ -1247,6 +1239,18 @@
             };
 
             const pc = ensurePeer(peer);
+            const polite = userEmail > peer.email;
+
+            const offerCollision = makingOfferMap[peer.email] || pc.signalingState !== "stable";
+            const ignoreOffer = !polite && offerCollision;
+
+            if (ignoreOffer) {
+                return;
+            }
+
+            if (offerCollision && polite) {
+                await pc.setLocalDescription({ type: "rollback" });
+            }
 
             await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             await flushPendingCandidates(peer.email);
@@ -1268,32 +1272,24 @@
             const pc = peerConnections[peerEmail];
 
             if (!pc) return;
-            if (pc.signalingState === "stable") return;
-
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
             await flushPendingCandidates(peerEmail);
         }
 
         async function handleIceCandidate(data) {
             const peerEmail = data.from_email;
+            const pc = peerConnections[peerEmail];
 
-            if (!peerConnections[peerEmail]) {
+            if (!pc || !pc.remoteDescription) {
                 pendingCandidates[peerEmail] = pendingCandidates[peerEmail] || [];
                 pendingCandidates[peerEmail].push(data.candidate);
                 return;
             }
 
-            const pc = peerConnections[peerEmail];
-
-            if (pc.remoteDescription) {
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                } catch (err) {
-                    console.warn("Could not add ICE candidate", err);
-                }
-            } else {
-                pendingCandidates[peerEmail] = pendingCandidates[peerEmail] || [];
-                pendingCandidates[peerEmail].push(data.candidate);
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (err) {
+                console.warn("Could not add ICE candidate", err);
             }
         }
 
@@ -1303,8 +1299,7 @@
                 $("local-video").srcObject = localStream;
                 $("local-no-video").classList.add("hidden");
 
-                // FIX: if peer connections already exist (socket connected before camera was ready),
-                // add tracks now — onnegotiationneeded will fire and trigger a new offer automatically
+                // If peer connections already exist, add tracks now
                 for (const [peerEmail, pc] of Object.entries(peerConnections)) {
                     const senders = pc.getSenders();
                     for (const track of localStream.getTracks()) {
@@ -1505,7 +1500,7 @@
             });
 
             // NOTE: saveNoteForUser is now handled inside socket.on("new-message")
-            // so ALL room members (including sender) get the note saved exactly once.
+            // so ALL room members get the note saved exactly once.
             studyStats.notesShared += 1;
             markStudyDay();
             saveStudyStats();
@@ -1601,9 +1596,7 @@
             socket.on("new-message", (data) => {
                 addChatMessage(data.user, data.text, data.type, data.fileName);
 
-                // FIX: Save notes for EVERY room member (sender + receivers) exactly once.
-                // shareNote() no longer calls saveNoteForUser so this is the single save
-                // point — meaning all participants get shared notes in their Notes History.
+                // Save notes for EVERY room member exactly once.
                 if (data.type === "note") {
                     saveNoteForUser(
                         { email: userEmail },
@@ -1623,7 +1616,7 @@
         function leaveRoom() {
             if (!confirm("Leave this study room?")) return;
 
-            // FIX: if timer was still running, it's an early leave → award 2 points
+            // if timer was still running, award early leave points
             if (timerRunning) {
                 studyStats.earlyLeaves = (studyStats.earlyLeaves || 0) + 1;
                 markStudyDay();
