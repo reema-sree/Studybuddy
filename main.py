@@ -1171,6 +1171,44 @@ async def reset_db():
     return {"success": True, "message": "Database wiped and recreated. Remove this endpoint now!"}
 
 
+@app.get("/api/ice-config")
+async def get_ice_config():
+    """
+    Return ICE server config to the client.
+    Set these env vars in production to provide real TURN credentials:
+      TURN_URL      e.g. "turn:YOUR_TURN_HOST:3478"
+      TURN_USERNAME e.g. "your_turn_user"
+      TURN_CREDENTIAL e.g. "your_turn_password"
+    If not set, falls back to the free public relay (unreliable in production).
+    """
+    turn_url        = os.getenv("TURN_URL", "")
+    turn_username   = os.getenv("TURN_USERNAME", "")
+    turn_credential = os.getenv("TURN_CREDENTIAL", "")
+
+    ice_servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+        {"urls": "stun:stun.cloudflare.com:3478"},
+    ]
+
+    if turn_url and turn_username and turn_credential:
+        # Prefer env-var TURN credentials (Metered.ca, Xirsys, Twilio, Coturn, etc.)
+        ice_servers.extend([
+            {"urls": turn_url,                              "username": turn_username, "credential": turn_credential},
+            {"urls": turn_url.replace(":3478", ":443"),     "username": turn_username, "credential": turn_credential},
+            {"urls": turn_url.replace("turn:", "turns:"),   "username": turn_username, "credential": turn_credential},
+        ])
+    else:
+        # Free public fallback — works for localhost, unreliable in production
+        ice_servers.extend([
+            {"urls": "turn:openrelay.metered.ca:80",             "username": "openrelayproject", "credential": "openrelayproject"},
+            {"urls": "turn:openrelay.metered.ca:443",            "username": "openrelayproject", "credential": "openrelayproject"},
+            {"urls": "turn:openrelay.metered.ca:443?transport=tcp","username": "openrelayproject","credential": "openrelayproject"},
+        ])
+
+    return {"iceServers": ice_servers}
+
+
 if __name__ == "__main__":
     import uvicorn
 

@@ -22,31 +22,26 @@
         "Other"
     ];
 
-    const ICE_SERVERS = {
-        iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" },
-            { urls: "stun:stun.cloudflare.com:3478" },
-            {
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            {
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            {
-                urls: "turn:openrelay.metered.ca:443?transport=tcp",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            }
-        ]
-    };
+    // ICE config is fetched from the server so TURN credentials stay out of client code
+    // and can be changed via environment variables without redeploying the frontend.
+    let _iceConfig = null;
+    async function fetchIceConfig() {
+        if (_iceConfig) return _iceConfig;
+        try {
+            const res = await fetch("/api/ice-config");
+            const data = await res.json();
+            _iceConfig = data; // { iceServers: [...] }
+        } catch {
+            // Fallback if the endpoint fails
+            _iceConfig = {
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun.cloudflare.com:3478" }
+                ]
+            };
+        }
+        return _iceConfig;
+    }
 
 
     const MAX_FILE_SIZE_MB = 10;
@@ -1127,7 +1122,7 @@
 
             createRemotePlaceholder(peer);
 
-            const pc = new RTCPeerConnection(ICE_SERVERS);
+            const pc = new RTCPeerConnection(_iceConfig || { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
             peerConnections[peer.email] = pc;
             pendingCandidates[peer.email] = pendingCandidates[peer.email] || [];
 
@@ -1294,6 +1289,17 @@
         }
 
         async function startLocalVideo() {
+            // getUserMedia requires a secure context (HTTPS or localhost).
+            // On a deployed HTTP site the browser sets mediaDevices to undefined.
+            if (!window.isSecureContext || !navigator.mediaDevices) {
+                $("local-no-video").classList.remove("hidden");
+                $("local-no-video").textContent =
+                    "Camera unavailable: your site must be served over HTTPS. " +
+                    "HTTP blocks camera/mic access on all non-localhost origins.";
+                $("video-btn").disabled = true;
+                $("audio-btn").disabled = true;
+                return;
+            }
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 $("local-video").srcObject = localStream;
@@ -1555,7 +1561,14 @@
         }
 
         function connectSocket() {
-            socket = io();
+            // Explicitly prefer WebSocket over polling.
+            // Many reverse proxies (nginx, Cloudflare, Render, Railway) default to
+            // blocking WebSocket upgrades — enable it in your proxy config too.
+            socket = io({
+                transports: ["websocket", "polling"],
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1500
+            });
 
             socket.on("connect", () => {
                 $("connection-status").textContent = "Online";
@@ -1669,7 +1682,8 @@
 
         updateTimerDisplay();
         loadHistory();
-        startLocalVideo().then(connectSocket);
+        // Fetch ICE config first so TURN credentials are ready before any peer connection is created
+        fetchIceConfig().then(() => startLocalVideo()).then(connectSocket);
     }
 
     document.addEventListener("DOMContentLoaded", () => {
