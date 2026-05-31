@@ -18,7 +18,7 @@ import bcrypt
 _match_lock = asyncio.Lock()
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import socketio
@@ -83,7 +83,7 @@ def send_email(to_email, subject, html_body):
         msg["From"]    = f"Study Buddy <{gmail_user}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.login(gmail_user, gmail_password)
@@ -159,25 +159,6 @@ def init_db():
     """)
 
     conn.commit()
-
-    # Migrate existing DB — add new columns if they don't exist yet
-    migration_columns = [
-        ("users", "email_verified INTEGER DEFAULT 0"),
-        ("users", "verification_code TEXT"),
-        ("users", "verification_expires TEXT"),
-        ("users", "reset_code TEXT"),
-        ("users", "reset_expires TEXT"),
-        ("users", "auth_token TEXT"),
-        ("users", "stats TEXT DEFAULT '{}'"),
-        ("users", "notes TEXT DEFAULT '[]'"),
-    ]
-    for table, col_def in migration_columns:
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
-            conn.commit()
-        except Exception:
-            pass  # column already exists
-
     conn.close()
 
 
@@ -419,7 +400,7 @@ def check_auth(cur, email: str, auth_token: str):
 
 
 @app.post("/auth/register")
-async def register(request: Request):
+async def register(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     name     = (data.get("name") or "").strip()
     email    = (data.get("email") or "").lower().strip()
@@ -453,7 +434,8 @@ async def register(request: Request):
                     (code, expires, email)
                 )
                 conn.commit()
-                send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+                background_tasks.add_task(send_email, email,
+                    "Study Buddy — Verify your email", _verification_email(name, code))
                 return {"success": True, "needs_verification": True, "email": email,
                         "message": "Verification code resent. Check your inbox."}
 
@@ -467,7 +449,10 @@ async def register(request: Request):
         )
         conn.commit()
 
-        send_email(email, "Study Buddy — Verify your email", _verification_email(name, code))
+        # Send in background so HTTP response returns immediately — never blocks
+        background_tasks.add_task(send_email, email,
+            "Study Buddy — Verify your email", _verification_email(name, code))
+
         return {"success": True, "needs_verification": True, "email": email,
                 "message": "Check your email for the 6-digit verification code."}
     except Exception as exc:
@@ -478,7 +463,7 @@ async def register(request: Request):
 
 
 @app.post("/auth/login")
-async def auth_login(request: Request):
+async def auth_login(request: Request, background_tasks: BackgroundTasks):
     data     = await request.json()
     email    = (data.get("email") or "").lower().strip()
     password = (data.get("password") or "").strip()
@@ -504,8 +489,8 @@ async def auth_login(request: Request):
             cur.execute("UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
                         (code, expires, email))
             conn.commit()
-            send_email(email, "Study Buddy — Verify your email",
-                       _verification_email(user["name"], code))
+            background_tasks.add_task(send_email, email,
+                "Study Buddy — Verify your email", _verification_email(user["name"], code))
             return {"success": True, "needs_verification": True, "email": email,
                     "message": "Your email is not verified. A new code has been sent."}
 
@@ -569,7 +554,7 @@ async def verify_email_code(request: Request):
 
 
 @app.post("/auth/forgot-password")
-async def forgot_password(request: Request):
+async def forgot_password(request: Request, background_tasks: BackgroundTasks):
     data  = await request.json()
     email = (data.get("email") or "").lower().strip()
 
@@ -594,7 +579,8 @@ async def forgot_password(request: Request):
                     (code, expires, email))
         conn.commit()
 
-        send_email(email, "Study Buddy — Password Reset", _reset_email(user["name"], code))
+        background_tasks.add_task(send_email, email,
+            "Study Buddy — Password Reset", _reset_email(user["name"], code))
         return {"success": True, "message": "Reset code sent. Check your inbox."}
     except Exception as exc:
         return {"success": False, "error": str(exc)}
@@ -867,25 +853,13 @@ async def join_queue(request: Request):
             existing = cur.fetchone()
 
             if existing:
-                subject_val  = existing["subject"] or ""
-                cross_subject = " / " in subject_val
-                partner_subject = ""
-                if cross_subject:
-                    try:
-                        ex_members = json.loads(existing["members"] or "[]")
-                        partner_subjects = [m["subject"] for m in ex_members if m.get("email") != user_email]
-                        partner_subject = partner_subjects[0] if partner_subjects else ""
-                    except Exception:
-                        pass
                 cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
                 conn.commit()
                 return {
                     "success": True,
                     "matched": True,
-                    "cross_subject": cross_subject,
-                    "partner_subject": partner_subject,
                     "room_code": existing["room_code"],
-                    "subject": subject_val,
+                    "subject": existing["subject"],
                     "members": json.loads(existing["members"] or "[]"),
                 }
 
@@ -1158,9 +1132,8 @@ async def get_messages(room_code: str):
 
 @app.get("/debug/reset-db")
 async def reset_db():
-    """One-time DB wipe endpoint. Remove from production after use!"""
     conn = connect_db()
-    cur  = conn.cursor()
+    cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS users")
     cur.execute("DROP TABLE IF EXISTS rooms")
     cur.execute("DROP TABLE IF EXISTS waiting_queue")
@@ -1168,45 +1141,7 @@ async def reset_db():
     conn.commit()
     conn.close()
     init_db()
-    return {"success": True, "message": "Database wiped and recreated. Remove this endpoint now!"}
-
-
-@app.get("/api/ice-config")
-async def get_ice_config():
-    """
-    Return ICE server config to the client.
-    Set these env vars in production to provide real TURN credentials:
-      TURN_URL      e.g. "turn:YOUR_TURN_HOST:3478"
-      TURN_USERNAME e.g. "your_turn_user"
-      TURN_CREDENTIAL e.g. "your_turn_password"
-    If not set, falls back to the free public relay (unreliable in production).
-    """
-    turn_url        = os.getenv("TURN_URL", "")
-    turn_username   = os.getenv("TURN_USERNAME", "")
-    turn_credential = os.getenv("TURN_CREDENTIAL", "")
-
-    ice_servers = [
-        {"urls": "stun:stun.l.google.com:19302"},
-        {"urls": "stun:stun1.l.google.com:19302"},
-        {"urls": "stun:stun.cloudflare.com:3478"},
-    ]
-
-    if turn_url and turn_username and turn_credential:
-        # Prefer env-var TURN credentials (Metered.ca, Xirsys, Twilio, Coturn, etc.)
-        ice_servers.extend([
-            {"urls": turn_url,                              "username": turn_username, "credential": turn_credential},
-            {"urls": turn_url.replace(":3478", ":443"),     "username": turn_username, "credential": turn_credential},
-            {"urls": turn_url.replace("turn:", "turns:"),   "username": turn_username, "credential": turn_credential},
-        ])
-    else:
-        # Free public fallback — works for localhost, unreliable in production
-        ice_servers.extend([
-            {"urls": "turn:openrelay.metered.ca:80",             "username": "openrelayproject", "credential": "openrelayproject"},
-            {"urls": "turn:openrelay.metered.ca:443",            "username": "openrelayproject", "credential": "openrelayproject"},
-            {"urls": "turn:openrelay.metered.ca:443?transport=tcp","username": "openrelayproject","credential": "openrelayproject"},
-        ])
-
-    return {"iceServers": ice_servers}
+    return {"success": True, "message": "DB wiped. Remove this endpoint!"}
 
 
 if __name__ == "__main__":
