@@ -463,7 +463,7 @@ async def register(request: Request, background_tasks: BackgroundTasks):
 
 
 @app.post("/auth/login")
-async def auth_login(request: Request, background_tasks: BackgroundTasks):
+async def auth_login(request: Request):
     data     = await request.json()
     email    = (data.get("email") or "").lower().strip()
     password = (data.get("password") or "").strip()
@@ -481,19 +481,6 @@ async def auth_login(request: Request, background_tasks: BackgroundTasks):
             return {"success": False, "error": "No account found. Please register first."}
         if not bcrypt.checkpw(password.encode(), user["password_hash"]):
             return {"success": False, "error": "Incorrect password. Please try again."}
-        if not user["email_verified"]:
-            # Resend verification code
-            from datetime import timedelta
-            code    = make_code()
-            expires = (datetime.now() + timedelta(minutes=15)).isoformat()
-            cur.execute("UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
-                        (code, expires, email))
-            conn.commit()
-            background_tasks.add_task(send_email, email,
-                "Study Buddy — Verify your email", _verification_email(user["name"], code))
-            return {"success": True, "needs_verification": True, "email": email,
-                    "message": "Your email is not verified. A new code has been sent."}
-
         auth_token = str(uuid.uuid4())
         cur.execute("UPDATE users SET auth_token=?, last_login=? WHERE email=?",
                     (auth_token, datetime.now().isoformat(), email))
