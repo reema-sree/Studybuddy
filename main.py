@@ -760,12 +760,7 @@ async def room_redirect(room_code: str):
 
 @app.get("/health")
 async def health():
-    return {
-        "status": "healthy",
-        "ai": ai_client is not None,
-        "email_configured": email_configured(),
-        "smtp_host": smtp_host if email_configured() else None,
-    }
+    return {"status": "healthy", "ai": ai_client is not None}
 
 
 # FIX: added subject param so the AI tutor knows the context
