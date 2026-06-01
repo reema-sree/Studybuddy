@@ -9,8 +9,7 @@ import string
 import uuid
 import smtplib
 import ssl
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from email.message import EmailMessage
 
 import bcrypt
 
@@ -18,7 +17,7 @@ import bcrypt
 _match_lock = asyncio.Lock()
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import socketio
@@ -35,8 +34,35 @@ DB_PATH = BASE_DIR / "studybuddy.db"
 
 load_dotenv(BASE_DIR / ".env")
 
-gmail_user     = os.getenv("GMAIL_USER", "")
-gmail_password = os.getenv("GMAIL_APP_PASSWORD", "")
+def env_value(*names, default=""):
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value.strip()
+    return default
+
+
+def env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)) or default)
+    except ValueError:
+        return default
+
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+gmail_user = env_value("GMAIL_USER", "EMAIL_USER", "SMTP_USER")
+gmail_password = env_value("GMAIL_APP_PASSWORD", "GMAIL_PASSWORD", "EMAIL_PASSWORD", "SMTP_PASSWORD")
+smtp_host = env_value("SMTP_HOST", default="smtp.gmail.com")
+smtp_port = env_int("SMTP_PORT", 587)
+smtp_from_name = env_value("SMTP_FROM_NAME", default="Study Buddy")
+smtp_use_ssl = env_bool("SMTP_SSL", smtp_port == 465)
+smtp_starttls = env_bool("SMTP_STARTTLS", not smtp_use_ssl)
 
 gemini_key = os.getenv("GEMINI_KEY")
 gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -74,24 +100,53 @@ def make_code(length=6):
 
 
 def send_email(to_email, subject, html_body):
-    if not gmail_user or not gmail_password:
-        print("Gmail not configured - skipping email send.")
+    if not email_configured():
+        print("Email not configured - set GMAIL_USER and GMAIL_APP_PASSWORD in the deployed environment.")
         return False
     try:
-        msg = MIMEMultipart("alternative")
+        msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"]    = f"Study Buddy <{gmail_user}>"
+        msg["From"]    = f"{smtp_from_name} <{gmail_user}>"
         msg["To"]      = to_email
-        msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(gmail_user, gmail_password)
-            server.sendmail(gmail_user, to_email, msg.as_string())
+        msg.set_content("Open this email in an HTML-capable client to view your Study Buddy code.")
+        msg.add_alternative(html_body, subtype="html")
+
+        context = ssl.create_default_context()
+        if smtp_use_ssl:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20, context=context) as server:
+                server.login(gmail_user, gmail_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                server.ehlo()
+                if smtp_starttls:
+                    server.starttls(context=context)
+                    server.ehlo()
+                server.login(gmail_user, gmail_password)
+                server.send_message(msg)
+        print(f"Email sent to {to_email}")
         return True
+    except smtplib.SMTPAuthenticationError:
+        print("Email send failed: SMTP authentication rejected. For Gmail, use an App Password.")
+        return False
     except Exception as exc:
         print(f"Email send failed: {exc}")
         return False
+
+
+def email_configured():
+    return bool(gmail_user and gmail_password)
+
+
+EMAIL_SEND_ERROR = "Could not send the email. Check SMTP variables in the deployed environment."
+
+
+def send_verification_email(to_email, name, code):
+    return send_email(to_email, "Study Buddy - Verify your email", _verification_email(name, code))
+
+
+def send_reset_email(to_email, name, code):
+    return send_email(to_email, "Study Buddy - Password Reset", _reset_email(name, code))
 
 
 def connect_db():
@@ -400,7 +455,7 @@ def check_auth(cur, email: str, auth_token: str):
 
 
 @app.post("/auth/register")
-async def register(request: Request, background_tasks: BackgroundTasks):
+async def register(request: Request):
     data = await request.json()
     name     = (data.get("name") or "").strip()
     email    = (data.get("email") or "").lower().strip()
@@ -434,8 +489,8 @@ async def register(request: Request, background_tasks: BackgroundTasks):
                     (code, expires, email)
                 )
                 conn.commit()
-                background_tasks.add_task(send_email, email,
-                    "Study Buddy — Verify your email", _verification_email(name, code))
+                if not send_verification_email(email, name, code):
+                    return {"success": False, "error": EMAIL_SEND_ERROR}
                 return {"success": True, "needs_verification": True, "email": email,
                         "message": "Verification code resent. Check your inbox."}
 
@@ -449,9 +504,8 @@ async def register(request: Request, background_tasks: BackgroundTasks):
         )
         conn.commit()
 
-        # Send in background so HTTP response returns immediately — never blocks
-        background_tasks.add_task(send_email, email,
-            "Study Buddy — Verify your email", _verification_email(name, code))
+        if not send_verification_email(email, name, code):
+            return {"success": False, "error": EMAIL_SEND_ERROR}
 
         return {"success": True, "needs_verification": True, "email": email,
                 "message": "Check your email for the 6-digit verification code."}
@@ -541,7 +595,7 @@ async def verify_email_code(request: Request):
 
 
 @app.post("/auth/forgot-password")
-async def forgot_password(request: Request, background_tasks: BackgroundTasks):
+async def forgot_password(request: Request):
     data  = await request.json()
     email = (data.get("email") or "").lower().strip()
 
@@ -566,8 +620,8 @@ async def forgot_password(request: Request, background_tasks: BackgroundTasks):
                     (code, expires, email))
         conn.commit()
 
-        background_tasks.add_task(send_email, email,
-            "Study Buddy — Password Reset", _reset_email(user["name"], code))
+        if not send_reset_email(email, user["name"], code):
+            return {"success": False, "error": EMAIL_SEND_ERROR}
         return {"success": True, "message": "Reset code sent. Check your inbox."}
     except Exception as exc:
         return {"success": False, "error": str(exc)}
@@ -706,7 +760,12 @@ async def room_redirect(room_code: str):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "ai": ai_client is not None}
+    return {
+        "status": "healthy",
+        "ai": ai_client is not None,
+        "email_configured": email_configured(),
+        "smtp_host": smtp_host if email_configured() else None,
+    }
 
 
 # FIX: added subject param so the AI tutor knows the context
