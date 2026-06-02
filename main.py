@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
 import json
 import os
@@ -57,7 +57,8 @@ def env_bool(name, default=False):
 
 
 gmail_user = env_value("GMAIL_USER", "EMAIL_USER", "SMTP_USER")
-gmail_password = env_value("GMAIL_APP_PASSWORD", "GMAIL_PASSWORD", "EMAIL_PASSWORD", "SMTP_PASSWORD")
+# FIX: strip spaces from App Password — Google formats it with spaces but smtplib needs none
+gmail_password = env_value("GMAIL_APP_PASSWORD", "GMAIL_PASSWORD", "EMAIL_PASSWORD", "SMTP_PASSWORD").replace(" ", "")
 smtp_host = env_value("SMTP_HOST", default="smtp.gmail.com")
 smtp_port = env_int("SMTP_PORT", 587)
 smtp_from_name = env_value("SMTP_FROM_NAME", default="Study Buddy")
@@ -77,6 +78,11 @@ if genai and gemini_key:
 else:
     ai_client = None
     print("Gemini not configured")
+
+# TURN server config from env (optional — falls back to public STUN only)
+turn_url      = env_value("TURN_URL")
+turn_username = env_value("TURN_USERNAME")
+turn_password = env_value("TURN_PASSWORD", "TURN_CREDENTIAL")
 
 sio = socketio.AsyncServer(
     async_mode="asgi",
@@ -126,8 +132,8 @@ def send_email(to_email, subject, html_body):
                 server.send_message(msg)
         print(f"Email sent to {to_email}")
         return True
-    except smtplib.SMTPAuthenticationError:
-        print("Email send failed: SMTP authentication rejected. For Gmail, use an App Password.")
+    except smtplib.SMTPAuthenticationError as exc:
+        print(f"Email send failed: SMTP authentication rejected — {exc}. For Gmail, use an App Password (no spaces).")
         return False
     except Exception as exc:
         print(f"Email send failed: {exc}")
@@ -242,8 +248,20 @@ def template(name):
     return FileResponse(TEMPLATE_DIR / name)
 
 
+# FIX: proper datetime comparison using fromisoformat instead of string comparison
+def is_expired(iso_string: str) -> bool:
+    """Returns True if the ISO datetime string is in the past."""
+    if not iso_string:
+        return True
+    try:
+        return datetime.now() > datetime.fromisoformat(iso_string)
+    except ValueError:
+        return True
+
+
 init_db()
 print("Database ready")
+print(f"Email configured: {email_configured()} (user={gmail_user!r})")
 
 
 async def emit_room_users(room_code):
@@ -469,8 +487,6 @@ async def register(request: Request):
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     now  = datetime.now().isoformat()
     code = make_code()
-    # Code expires in 15 minutes
-    from datetime import timedelta
     expires = (datetime.now() + timedelta(minutes=15)).isoformat()
 
     conn = connect_db()
@@ -483,10 +499,10 @@ async def register(request: Request):
             if existing["email_verified"]:
                 return {"success": False, "error": "Account already exists. Please sign in."}
             else:
-                # Re-send verification code for unverified account
+                # FIX: also update password_hash so the new password takes effect
                 cur.execute(
-                    "UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
-                    (code, expires, email)
+                    "UPDATE users SET name=?, password_hash=?, verification_code=?, verification_expires=? WHERE email=?",
+                    (name, password_hash, code, expires, email)
                 )
                 conn.commit()
                 if not send_verification_email(email, name, code):
@@ -535,6 +551,25 @@ async def auth_login(request: Request):
             return {"success": False, "error": "No account found. Please register first."}
         if not bcrypt.checkpw(password.encode(), user["password_hash"]):
             return {"success": False, "error": "Incorrect password. Please try again."}
+
+        # FIX: enforce email verification before allowing login
+        if not user["email_verified"]:
+            # Re-send a fresh verification code
+            code    = make_code()
+            expires = (datetime.now() + timedelta(minutes=15)).isoformat()
+            cur.execute(
+                "UPDATE users SET verification_code=?, verification_expires=? WHERE email=?",
+                (code, expires, email)
+            )
+            conn.commit()
+            send_verification_email(email, user["name"], code)
+            return {
+                "success": True,
+                "needs_verification": True,
+                "email": email,
+                "message": "Please verify your email first. A new code has been sent.",
+            }
+
         auth_token = str(uuid.uuid4())
         cur.execute("UPDATE users SET auth_token=?, last_login=? WHERE email=?",
                     (auth_token, datetime.now().isoformat(), email))
@@ -571,7 +606,8 @@ async def verify_email_code(request: Request):
             return {"success": False, "error": "Email already verified. Please sign in."}
         if user["verification_code"] != code:
             return {"success": False, "error": "Incorrect code. Please try again."}
-        if datetime.now().isoformat() > user["verification_expires"]:
+        # FIX: use proper datetime comparison
+        if is_expired(user["verification_expires"]):
             return {"success": False, "error": "Code expired. Please register again to get a new code."}
 
         auth_token = str(uuid.uuid4())
@@ -612,7 +648,6 @@ async def forgot_password(request: Request):
             # Don't reveal whether account exists
             return {"success": True, "message": "If an account exists, a reset code has been sent."}
 
-        from datetime import timedelta
         code    = make_code()
         expires = (datetime.now() + timedelta(minutes=15)).isoformat()
 
@@ -649,7 +684,8 @@ async def reset_password(request: Request):
 
         if not user or user["reset_code"] != code:
             return {"success": False, "error": "Invalid or expired reset code."}
-        if datetime.now().isoformat() > (user["reset_expires"] or ""):
+        # FIX: use proper datetime comparison
+        if is_expired(user["reset_expires"]):
             return {"success": False, "error": "Reset code expired. Please request a new one."}
 
         new_hash   = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())
@@ -763,7 +799,47 @@ async def health():
     return {"status": "healthy", "ai": ai_client is not None}
 
 
-# FIX: added subject param so the AI tutor knows the context
+# FIX: /api/ice-config endpoint — provides ICE server config to the frontend.
+# On the same LAN STUN alone works; across different networks TURN is required.
+# Configure TURN_URL / TURN_USERNAME / TURN_PASSWORD in .env for production.
+@app.get("/api/ice-config")
+async def ice_config():
+    ice_servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+        {"urls": "stun:stun.cloudflare.com:3478"},
+    ]
+
+    if turn_url and turn_username and turn_password:
+        ice_servers.append({
+            "urls": turn_url,
+            "username": turn_username,
+            "credential": turn_password,
+        })
+    else:
+        # Add free public TURN servers as fallback for cross-network video.
+        # These are provided by Open Relay Project and are rate-limited but functional.
+        ice_servers += [
+            {
+                "urls": "turn:openrelay.metered.ca:80",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+            {
+                "urls": "turn:openrelay.metered.ca:443",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+            {
+                "urls": "turn:openrelay.metered.ca:443?transport=tcp",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+        ]
+
+    return {"iceServers": ice_servers}
+
+
 @app.get("/ai/ask")
 async def ask_ai(question: str, subject: str = "General"):
     if not ai_client:
@@ -779,7 +855,6 @@ async def ask_ai(question: str, subject: str = "General"):
         return {"success": False, "error": str(exc)}
 
 
-# FIX: missing endpoint — frontend calls POST /ai/summarize-room
 @app.post("/ai/summarize-room")
 async def summarize_room(request: Request):
     data = await request.json()
@@ -815,9 +890,8 @@ async def summarize_room(request: Request):
         return {"success": True, "summary": response.text}
     except Exception as exc:
         return {"success": False, "summary": str(exc)}
-    
 
-# FIX: missing endpoint — frontend calls POST /ai/quiz
+
 @app.post("/ai/quiz")
 async def generate_quiz(request: Request):
     data = await request.json()
@@ -842,7 +916,6 @@ async def generate_quiz(request: Request):
         return {"success": False, "quiz": str(exc)}
 
 
-# FIX: missing endpoint — frontend calls POST /ai/study-plan
 @app.post("/ai/study-plan")
 async def generate_study_plan(request: Request):
     data = await request.json()
@@ -880,11 +953,8 @@ async def join_queue(request: Request):
     data = await request.json()
     user_name, user_email, subject = clean_user(data)
 
-    # FIX: lock ensures only one request runs the matching logic at a time,
-    # preventing two users from simultaneously creating two separate rooms.
     async with _match_lock:
         conn = connect_db()
-        # Enable WAL mode for better SQLite concurrency
         conn.execute("PRAGMA journal_mode=WAL")
         cur = conn.cursor()
 
@@ -957,18 +1027,23 @@ async def join_queue(request: Request):
                             json.dumps(members), datetime.now().isoformat(),
                         ),
                     )
+
+                # FIX: fetch current user's match result BEFORE deleting it so we can return it
+                cur.execute("SELECT * FROM match_results WHERE user_email = ?", (user_email,))
+                my_result = cur.fetchone()
                 cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
                 conn.commit()
+
                 return {
                     "success": True,
                     "matched": True,
                     "cross_subject": False,
-                    "room_code": room_code,
+                    "room_code": my_result["room_code"] if my_result else room_code,
                     "subject": subject,
                     "members": members,
                 }
 
-            # FIX: cross-subject fallback — if no same-subject partner,
+            # Cross-subject fallback — if no same-subject partner,
             # look for ANY student waiting in the queue
             cur.execute(
                 """
@@ -993,7 +1068,6 @@ async def join_queue(request: Request):
                     },
                 ]
                 room_code = create_unique_room(cur)
-                # Label room with both subjects
                 room_subject = f"{subject} / {partner_subject}"
                 cur.execute(
                     """
@@ -1019,24 +1093,33 @@ async def join_queue(request: Request):
                             json.dumps(members), datetime.now().isoformat(),
                         ),
                     )
+
+                # FIX: fetch current user's match result BEFORE deleting it
+                cur.execute("SELECT * FROM match_results WHERE user_email = ?", (user_email,))
+                my_result = cur.fetchone()
                 cur.execute("DELETE FROM match_results WHERE user_email = ?", (user_email,))
                 conn.commit()
+
                 return {
                     "success": True,
                     "matched": True,
                     "cross_subject": True,
                     "partner_subject": partner_subject,
-                    "room_code": room_code,
+                    "room_code": my_result["room_code"] if my_result else room_code,
                     "subject": room_subject,
                     "members": members,
                 }
+
+            # FIX: use total queue count (not just same-subject) for accurate waiting message
+            cur.execute("SELECT COUNT(*) AS total FROM waiting_queue")
+            total_waiting = cur.fetchone()["total"]
 
             conn.commit()
             return {
                 "success": True,
                 "matched": False,
                 "waiting": len(waiting),
-                "message": f"Waiting for a {subject} partner... ({len(waiting)}/2)",
+                "message": f"Waiting for a {subject} partner... ({total_waiting} total in queue)",
             }
         except Exception as exc:
             conn.rollback()
@@ -1149,13 +1232,21 @@ async def get_room_info(room_code: str):
     if not room:
         return {"success": False, "error": "Room not found"}
 
+    # FIX: also include live WebSocket connections so members list is always fresh
+    live_emails = set(room_connections.get(room_code.upper(), {}).keys())
+    db_members  = json.loads(room["members"] or "[]")
+
+    # Merge: DB members as base, mark who's currently online
+    for m in db_members:
+        m["online"] = m.get("email", "") in live_emails
+
     return {
         "success": True,
         "room": {
             "code": room["code"],
             "host": room["host"],
             "subject": room["subject"],
-            "members": json.loads(room["members"] or "[]"),
+            "members": db_members,
         },
     }
 
@@ -1171,18 +1262,10 @@ async def get_messages(room_code: str):
     return {"success": True, "messages": json.loads(room["messages"] or "[]") if room else []}
 
 
-@app.get("/debug/reset-db")
-async def reset_db():
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS users")
-    cur.execute("DROP TABLE IF EXISTS rooms")
-    cur.execute("DROP TABLE IF EXISTS waiting_queue")
-    cur.execute("DROP TABLE IF EXISTS match_results")
-    conn.commit()
-    conn.close()
-    init_db()
-    return {"success": True, "message": "DB wiped. Remove this endpoint!"}
+# FIX: debug/reset-db removed — it was an unauthenticated endpoint that wiped the entire DB.
+# If you need to reset during development, run this directly in a Python shell:
+#   from main import connect_db, init_db
+#   conn = connect_db(); [conn.execute(f"DROP TABLE IF EXISTS {t}") for t in ("users","rooms","waiting_queue","match_results")]; conn.commit(); init_db()
 
 
 if __name__ == "__main__":

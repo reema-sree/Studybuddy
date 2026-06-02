@@ -267,12 +267,13 @@
     }
 
     function statPoints(stats) {
-        const focusPoints = Math.floor(stats.focusSeconds / 60) * 2;
-        const completionPoints = stats.completedSessions * 4;   // FIX: was 50, now 4 per session
-        const earlyLeavePoints = (stats.earlyLeaves || 0) * 2; // FIX: 2 points for leaving early
-        const dayPoints = stats.studyDates.length * 25;
-        const notePoints = stats.notesShared * 10;
-        return focusPoints + completionPoints + earlyLeavePoints + dayPoints + notePoints;
+        const focusPoints      = Math.floor(stats.focusSeconds / 60) * 2;
+        const completionPoints = stats.completedSessions * 4;
+        // FIX: early leaves are a penalty, not a reward — deduct 3 pts each
+        const earlyLeavePenalty = (stats.earlyLeaves || 0) * 3;
+        const dayPoints        = stats.studyDates.length * 25;
+        const notePoints       = stats.notesShared * 10;
+        return Math.max(0, focusPoints + completionPoints - earlyLeavePenalty + dayPoints + notePoints);
     }
 
     function setStatsText(name, value) {
@@ -285,15 +286,21 @@
         const dashboard = $("home-dashboard");
         if (!dashboard) return;
 
-        const stats = readStatsForUser(user);
+        // FIX: only show the dashboard when a user is actually signed in
+        if (!user) {
+            dashboard.classList.add("hidden");
+            return;
+        }
+
+        const stats  = readStatsForUser(user);
         const streak = statStreak(stats);
 
         dashboard.classList.remove("hidden");
-        setStatsText("focusHours", statHours(stats.focusSeconds));
+        setStatsText("focusHours",    statHours(stats.focusSeconds));
         setStatsText("completedHours", statHours(stats.completedSeconds));
-        setStatsText("studyDays", String(stats.studyDates.length));
+        setStatsText("studyDays",     String(stats.studyDates.length));
         setStatsText("loyaltyPoints", String(statPoints(stats)));
-        setStatsText("streakLabel", `${streak} day${streak === 1 ? "" : "s"} streak`);
+        setStatsText("streakLabel",   `${streak} day${streak === 1 ? "" : "s"} streak`);
     }
 
     function readNotesForUser(user) {
@@ -1589,8 +1596,10 @@
 
             socket.on("user-left", (data) => {
                 if (data.email) {
+                    // FIX: show friendly name instead of raw email address
+                    const displayName = peerNames[data.email] || data.email.split("@")[0];
                     removePeer(data.email);
-                    addChatMessage("system", `${data.email} left the room.`);
+                    addChatMessage("system", `${displayName} left the room.`);
                 }
             });
 
@@ -1610,9 +1619,12 @@
                 addChatMessage(data.user, data.text, data.type, data.fileName);
 
                 // Save notes for EVERY room member exactly once.
+                // FIX: use the full saved user object (includes auth_token) so
+                // saveNoteForUser can sync the note to the server across devices.
                 if (data.type === "note") {
+                    const fullUser = getUser() || { email: userEmail };
                     saveNoteForUser(
-                        { email: userEmail },
+                        fullUser,
                         {
                             title: data.fileName || `${data.user}'s Note`,
                             content: data.text,
