@@ -65,6 +65,9 @@ smtp_from_name = env_value("SMTP_FROM_NAME", default="Study Buddy")
 smtp_use_ssl = env_bool("SMTP_SSL", smtp_port == 465)
 smtp_starttls = env_bool("SMTP_STARTTLS", not smtp_use_ssl)
 
+resend_api_key = env_value("RESEND_API_KEY")
+resend_from = env_value("RESEND_FROM", default="onboarding@resend.dev")
+
 gemini_key = os.getenv("GEMINI_KEY")
 gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -107,41 +110,69 @@ def make_code(length=6):
 
 def send_email(to_email, subject, html_body):
     if not email_configured():
-        print("Email not configured - set GMAIL_USER and GMAIL_APP_PASSWORD in the deployed environment.")
+        print("Email not configured - set RESEND_API_KEY or GMAIL_USER/GMAIL_APP_PASSWORD.")
         return False
-    try:
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"]    = f"{smtp_from_name} <{gmail_user}>"
-        msg["To"]      = to_email
-        msg.set_content("Open this email in an HTML-capable client to view your Study Buddy code.")
-        msg.add_alternative(html_body, subtype="html")
 
-        context = ssl.create_default_context()
-        if smtp_use_ssl:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20, context=context) as server:
-                server.login(gmail_user, gmail_password)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-                server.ehlo()
-                if smtp_starttls:
-                    server.starttls(context=context)
+    if resend_api_key:
+        try:
+            import requests
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json"
+            }
+            # Prepend name to from address if it doesn't already contain a brackets layout
+            from_str = f"{smtp_from_name} <{resend_from}>" if "<" not in resend_from else resend_from
+            payload = {
+                "from": from_str,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body
+            }
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
+            if response.status_code in {200, 201}:
+                print(f"Email sent via Resend to {to_email}")
+                return True
+            else:
+                print(f"Resend email send failed: {response.status_code} - {response.text}")
+                return False
+        except Exception as exc:
+            print(f"Resend email send failed: {exc}")
+            return False
+    else:
+        try:
+            msg = EmailMessage()
+            msg["Subject"] = subject
+            msg["From"]    = f"{smtp_from_name} <{gmail_user}>"
+            msg["To"]      = to_email
+            msg.set_content("Open this email in an HTML-capable client to view your Study Buddy code.")
+            msg.add_alternative(html_body, subtype="html")
+
+            context = ssl.create_default_context()
+            if smtp_use_ssl:
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20, context=context) as server:
+                    server.login(gmail_user, gmail_password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
                     server.ehlo()
-                server.login(gmail_user, gmail_password)
-                server.send_message(msg)
-        print(f"Email sent to {to_email}")
-        return True
-    except smtplib.SMTPAuthenticationError as exc:
-        print(f"Email send failed: SMTP authentication rejected — {exc}. For Gmail, use an App Password (no spaces).")
-        return False
-    except Exception as exc:
-        print(f"Email send failed: {exc}")
-        return False
+                    if smtp_starttls:
+                        server.starttls(context=context)
+                        server.ehlo()
+                    server.login(gmail_user, gmail_password)
+                    server.send_message(msg)
+            print(f"Email sent via SMTP to {to_email}")
+            return True
+        except smtplib.SMTPAuthenticationError as exc:
+            print(f"Email send failed: SMTP authentication rejected — {exc}. For Gmail, use an App Password (no spaces).")
+            return False
+        except Exception as exc:
+            print(f"Email send failed: {exc}")
+            return False
 
 
 def email_configured():
-    return bool(gmail_user and gmail_password)
+    return bool(resend_api_key) or bool(gmail_user and gmail_password)
 
 
 EMAIL_SEND_ERROR = "Could not send the email. Check SMTP variables in the deployed environment."
