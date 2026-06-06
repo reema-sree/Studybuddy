@@ -68,6 +68,9 @@ smtp_starttls = env_bool("SMTP_STARTTLS", not smtp_use_ssl)
 resend_api_key = env_value("RESEND_API_KEY")
 resend_from = env_value("RESEND_FROM", default="onboarding@resend.dev")
 
+brevo_api_key = env_value("BREVO_API_KEY")
+brevo_sender = env_value("BREVO_SENDER", default=gmail_user)
+
 gemini_key = os.getenv("GEMINI_KEY")
 gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -110,10 +113,34 @@ def make_code(length=6):
 
 def send_email(to_email, subject, html_body):
     if not email_configured():
-        print("Email not configured - set RESEND_API_KEY or GMAIL_USER/GMAIL_APP_PASSWORD.")
+        print("Email not configured - set BREVO_API_KEY, RESEND_API_KEY, or GMAIL_USER/GMAIL_APP_PASSWORD.")
         return False
 
-    if resend_api_key:
+    if brevo_api_key:
+        try:
+            import requests
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "api-key": brevo_api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "sender": { "name": smtp_from_name, "email": brevo_sender },
+                "to": [ { "email": to_email } ],
+                "subject": subject,
+                "htmlContent": html_body
+            }
+            response = requests.post(url, json=payload, headers=headers, timeout=20)
+            if response.status_code in {200, 201}:
+                print(f"Email sent via Brevo to {to_email}")
+                return True
+            else:
+                print(f"Brevo email send failed: {response.status_code} - {response.text}")
+                return False
+        except Exception as exc:
+            print(f"Brevo email send failed: {exc}")
+            return False
+    elif resend_api_key:
         try:
             import requests
             url = "https://api.resend.com/emails"
@@ -172,7 +199,7 @@ def send_email(to_email, subject, html_body):
 
 
 def email_configured():
-    return bool(resend_api_key) or bool(gmail_user and gmail_password)
+    return bool(brevo_api_key) or bool(resend_api_key) or bool(gmail_user and gmail_password)
 
 
 EMAIL_SEND_ERROR = "Could not send the email. Check SMTP variables in the deployed environment."
