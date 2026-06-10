@@ -1337,14 +1337,38 @@
                 $("local-no-video").textContent =
                     "Camera unavailable: your site must be served over HTTPS. " +
                     "HTTP blocks camera/mic access on all non-localhost origins.";
-                $("video-btn").disabled = true;
-                $("audio-btn").disabled = true;
+                const vBtn = $("video-btn");
+                const aBtn = $("audio-btn");
+                if (vBtn) {
+                    vBtn.disabled = true;
+                    vBtn.innerHTML = "🚫 Video Off";
+                    vBtn.classList.add("btn-red");
+                }
+                if (aBtn) {
+                    aBtn.disabled = true;
+                    aBtn.innerHTML = "🔇 Audio Off";
+                    aBtn.classList.add("btn-red");
+                }
                 return;
             }
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 $("local-video").srcObject = localStream;
                 $("local-no-video").classList.add("hidden");
+
+                // Sync initial button states
+                const vBtn = $("video-btn");
+                if (vBtn) {
+                    vBtn.innerHTML = "📹 Video On";
+                    vBtn.classList.remove("off", "btn-red");
+                    vBtn.classList.add("btn-primary");
+                }
+                const aBtn = $("audio-btn");
+                if (aBtn) {
+                    aBtn.innerHTML = "🎙️ Audio On";
+                    aBtn.classList.remove("off", "btn-red");
+                    aBtn.classList.add("btn-primary");
+                }
 
                 // If peer connections already exist, add tracks now
                 for (const [peerEmail, pc] of Object.entries(peerConnections)) {
@@ -1359,8 +1383,18 @@
             } catch {
                 $("local-no-video").classList.remove("hidden");
                 $("local-no-video").textContent = "Camera or microphone permission was blocked.";
-                $("video-btn").disabled = true;
-                $("audio-btn").disabled = true;
+                const vBtn = $("video-btn");
+                const aBtn = $("audio-btn");
+                if (vBtn) {
+                    vBtn.disabled = true;
+                    vBtn.innerHTML = "🚫 Video Off";
+                    vBtn.classList.add("btn-red");
+                }
+                if (aBtn) {
+                    aBtn.disabled = true;
+                    aBtn.innerHTML = "🔇 Audio Off";
+                    aBtn.classList.add("btn-red");
+                }
             }
         }
 
@@ -1378,7 +1412,17 @@
                 track.enabled = videoEnabled;
             });
 
-            $("video-btn").classList.toggle("off", !videoEnabled);
+            const btn = $("video-btn");
+            btn.classList.toggle("off", !videoEnabled);
+            if (videoEnabled) {
+                btn.innerHTML = "📹 Video On";
+                btn.classList.remove("btn-red");
+                btn.classList.add("btn-primary");
+            } else {
+                btn.innerHTML = "🚫 Video Off";
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-red");
+            }
         }
 
         function toggleAudio() {
@@ -1389,7 +1433,17 @@
                 track.enabled = audioEnabled;
             });
 
-            $("audio-btn").classList.toggle("off", !audioEnabled);
+            const btn = $("audio-btn");
+            btn.classList.toggle("off", !audioEnabled);
+            if (audioEnabled) {
+                btn.innerHTML = "🎙️ Audio On";
+                btn.classList.remove("btn-red");
+                btn.classList.add("btn-primary");
+            } else {
+                btn.innerHTML = "🔇 Audio Off";
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-red");
+            }
         }
 
         function updateTimerDisplay() {
