@@ -450,6 +450,46 @@ async def webrtc_ice_candidate(sid, data):
     )
 
 
+import base64
+import re
+
+UPLOAD_DIR = STATIC_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+def save_uploaded_file(base64_data: str, filename: str) -> str:
+    """
+    Saves a base64 data URL to the static/uploads directory.
+    Returns the relative path to the saved file (e.g. /static/uploads/uuid_filename.ext).
+    """
+    try:
+        if not base64_data or not base64_data.startswith("data:"):
+            return ""
+        
+        parts = base64_data.split(",", 1)
+        if len(parts) != 2:
+            return ""
+        
+        encoded_data = parts[1]
+        file_bytes = base64.b64decode(encoded_data)
+        
+        # Clean and construct a unique filename
+        # Strip path traversal attempts and only keep safe chars
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+        if not safe_filename:
+            safe_filename = "file.bin"
+            
+        unique_name = f"{uuid.uuid4().hex}_{safe_filename}"
+        file_path = UPLOAD_DIR / unique_name
+        
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+            
+        return f"/static/uploads/{unique_name}"
+    except Exception as e:
+        print(f"Failed to save uploaded file: {e}")
+        return ""
+
+
 @sio.event
 async def chat_message_socket(sid, data):
     room_code = (data.get("room_code") or "").upper().strip()
@@ -460,7 +500,7 @@ async def chat_message_socket(sid, data):
     file_name = data.get("file_name") or ""
     text      = data.get("text") or ""
 
-    # The full message (with base64 data) is broadcast to live room members
+    # The full message is broadcast to live room members
     broadcast_msg = {
         "user":      data.get("user_name") or "Student",
         "text":      text,
@@ -469,16 +509,28 @@ async def chat_message_socket(sid, data):
         "timestamp": datetime.now().isoformat(),
     }
 
-    # For file messages, store a lightweight stub in the DB instead of the
-    # full base64 data URL (which can be megabytes and corrupt the JSON column).
+    # For file messages, save the file to disk and store the relative URL
     if msg_type == "file":
-        db_msg = {
-            "user":      broadcast_msg["user"],
-            "text":      "",          # no base64 stored
-            "type":      "file_stub", # sentinel so the UI can show a notice
-            "fileName":  file_name,
-            "timestamp": broadcast_msg["timestamp"],
-        }
+        file_url = save_uploaded_file(text, file_name)
+        if file_url:
+            db_msg = {
+                "user":      broadcast_msg["user"],
+                "text":      file_url,   # Store the URL instead of empty/base64
+                "type":      "file",     # Keep type as file!
+                "fileName":  file_name,
+                "timestamp": broadcast_msg["timestamp"],
+            }
+            # Update broadcast_msg so it broadcasts the URL too, saving bandwidth
+            broadcast_msg["text"] = file_url
+        else:
+            # Fallback if saving failed
+            db_msg = {
+                "user":      broadcast_msg["user"],
+                "text":      "",
+                "type":      "file_stub",
+                "fileName":  file_name,
+                "timestamp": broadcast_msg["timestamp"],
+            }
     else:
         db_msg = broadcast_msg
 

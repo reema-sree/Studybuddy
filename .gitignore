@@ -11,3 +11,4 @@ venv/
 *.log
 .env.local
 .env.production
+static/uploads/
