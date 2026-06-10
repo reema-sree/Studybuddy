@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Study Buddy</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -11,6 +17,32 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
+            --bg:            #f8fafc;
+            --surface:       #ffffff;
+            --card:          #f1f5f9;
+            --border:        rgba(15,23,42,0.08);
+            --accent:        #d97706;
+            --accent-dim:    rgba(217,119,6,0.1);
+            --green:         #059669;
+            --green-dim:     rgba(5,150,105,0.1);
+            --red:           #dc2626;
+            --red-dim:       rgba(220,38,38,0.1);
+            --text:          #0f172a;
+            --text-muted:    #475569;
+            --text-faint:    #94a3b8;
+            --font-display:  'Playfair Display', Georgia, serif;
+            --font-body:     'Sora', system-ui, sans-serif;
+            --font-mono:     'JetBrains Mono', monospace;
+            --radius:        14px;
+            --radius-sm:     8px;
+            --shadow:        0 8px 32px rgba(15,23,42,0.06);
+            --glow-accent:   0 0 24px rgba(217,119,6,0.15);
+            --glow-green:    0 0 24px rgba(5,150,105,0.15);
+            --grid-line:     rgba(15,23,42,0.015);
+            --glow-color:    rgba(217,119,6,0.04);
+        }
+
+        [data-theme="dark"] {
             --bg:            #0b0f1a;
             --surface:       #111827;
             --card:          #18202f;
@@ -24,14 +56,11 @@
             --text:          #dce6f5;
             --text-muted:    #5a6a85;
             --text-faint:    #3a4a60;
-            --font-display:  'Playfair Display', Georgia, serif;
-            --font-body:     'Sora', system-ui, sans-serif;
-            --font-mono:     'JetBrains Mono', monospace;
-            --radius:        14px;
-            --radius-sm:     8px;
             --shadow:        0 8px 32px rgba(0,0,0,0.5);
             --glow-accent:   0 0 24px rgba(240,160,48,0.2);
             --glow-green:    0 0 24px rgba(62,207,142,0.2);
+            --grid-line:     rgba(255,255,255,0.015);
+            --glow-color:    rgba(240,160,48,0.06);
         }
 
         html { scroll-behavior: smooth; }
@@ -51,8 +80,8 @@
             position: fixed;
             inset: 0;
             background-image:
-                linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
             background-size: 40px 40px;
             pointer-events: none;
             z-index: 0;
@@ -65,7 +94,7 @@
             right: -100px;
             width: 600px;
             height: 600px;
-            background: radial-gradient(circle, rgba(240,160,48,0.06) 0%, transparent 70%);
+            background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
@@ -470,6 +499,7 @@
                 <p class="brand-subtitle">2–3 person video study rooms</p>
             </div>
         </div>
+        <button id="theme-toggle-btn" class="btn btn-ghost" style="padding: 9px 12px; font-size: 16px; margin-right: 8px;" aria-label="Toggle Theme">☀️</button>
         <button id="signin-btn" class="btn btn-primary">Sign In</button>
         <div id="user-profile" class="user-chip hidden">
             <div id="user-avatar" class="avatar" aria-label="User avatar">U</div>

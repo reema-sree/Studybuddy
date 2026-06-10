@@ -456,13 +456,31 @@ async def chat_message_socket(sid, data):
     if not room_code:
         return
 
-    msg = {
-        "user": data.get("user_name") or "Student",
-        "text": data.get("text") or "",
-        "type": data.get("type") or "message",
-        "fileName": data.get("file_name") or "",
+    msg_type  = data.get("type") or "message"
+    file_name = data.get("file_name") or ""
+    text      = data.get("text") or ""
+
+    # The full message (with base64 data) is broadcast to live room members
+    broadcast_msg = {
+        "user":      data.get("user_name") or "Student",
+        "text":      text,
+        "type":      msg_type,
+        "fileName":  file_name,
         "timestamp": datetime.now().isoformat(),
     }
+
+    # For file messages, store a lightweight stub in the DB instead of the
+    # full base64 data URL (which can be megabytes and corrupt the JSON column).
+    if msg_type == "file":
+        db_msg = {
+            "user":      broadcast_msg["user"],
+            "text":      "",          # no base64 stored
+            "type":      "file_stub", # sentinel so the UI can show a notice
+            "fileName":  file_name,
+            "timestamp": broadcast_msg["timestamp"],
+        }
+    else:
+        db_msg = broadcast_msg
 
     conn = connect_db()
     cur = conn.cursor()
@@ -472,7 +490,7 @@ async def chat_message_socket(sid, data):
         room = cur.fetchone()
         if room:
             messages = json.loads(room["messages"] or "[]")
-            messages.append(msg)
+            messages.append(db_msg)
             messages = messages[-200:]
             cur.execute(
                 "UPDATE rooms SET messages = ? WHERE code = ?",
@@ -482,7 +500,7 @@ async def chat_message_socket(sid, data):
     finally:
         conn.close()
 
-    await sio.emit("new-message", msg, room=room_code)
+    await sio.emit("new-message", broadcast_msg, room=room_code)
 
 
 

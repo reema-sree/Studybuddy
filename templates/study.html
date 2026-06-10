@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Study Room - Study Buddy</title>
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,17 +25,28 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
+            --bg: #f8fafc; --surface: #ffffff; --card: #f1f5f9;
+            --border: rgba(15,23,42,0.08); --border-mid: rgba(15,23,42,0.12);
+            --accent: #d97706; --accent-dim: rgba(217,119,6,0.1);
+            --green: #059669; --green-dim: rgba(5,150,105,0.1);
+            --red: #dc2626; --red-dim: rgba(220,38,38,0.1);
+            --text: #0f172a; --text-muted: #475569; --text-faint: #94a3b8;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Sora', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --radius: 12px; --radius-sm: 8px;
+            --topbar-h: 60px; --chat-w: 380px;
+            --shadow: 0 8px 32px rgba(15,23,42,0.06);
+            --glow-accent: 0 0 20px rgba(217,119,6,0.15);
+            --glow-green: 0 0 20px rgba(5,150,105,0.15);
+        }
+        [data-theme="dark"] {
             --bg: #0b0f1a; --surface: #0e1320; --card: #18202f;
             --border: rgba(255,255,255,0.07); --border-mid: rgba(255,255,255,0.1);
             --accent: #f0a030; --accent-dim: rgba(240,160,48,0.12);
             --green: #3ecf8e; --green-dim: rgba(62,207,142,0.12);
             --red: #f87171; --red-dim: rgba(248,113,113,0.14);
             --text: #dce6f5; --text-muted: #5a6a85; --text-faint: #3a4a60;
-            --font-display: 'Playfair Display', Georgia, serif;
-            --font-body: 'Sora', system-ui, sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-            --radius: 12px; --radius-sm: 8px;
-            --topbar-h: 60px; --chat-w: 380px;
             --shadow: 0 8px 32px rgba(0,0,0,0.5);
             --glow-accent: 0 0 20px rgba(240,160,48,0.2);
             --glow-green: 0 0 20px rgba(62,207,142,0.2);

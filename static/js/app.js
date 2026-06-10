@@ -950,16 +950,36 @@
                 .join("") || "?";
         }
 
+        function escapeHtml(text) {
+            return String(text || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         function formatChatText(text) {
-            const fragment = document.createDocumentFragment();
-            const lines = String(text || "").split("\n");
+            const div = document.createElement("div");
+            div.className = "chat-text";
 
-            lines.forEach((line, index) => {
-                if (index > 0) fragment.appendChild(document.createElement("br"));
-                fragment.appendChild(document.createTextNode(line));
-            });
+            let html = escapeHtml(text || "");
 
-            return fragment;
+            // Bold & Italic
+            html = html.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
+            html = html.replace(/\*\*_(.*?)_\*\*/g, "<strong><em>$1</em></strong>");
+            // Bold
+            html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+            // Italic
+            html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+            html = html.replace(/_(.*?)_/g, "<em>$1</em>");
+            // Inline code
+            html = html.replace(/`(.*?)`/g, "<code>$1</code>");
+            // Newlines to <br>
+            html = html.replace(/\n/g, "<br>");
+
+            div.innerHTML = html;
+            return div;
         }
 
         function addChatMessage(user, text, type = "message", fileName = "") {
@@ -1016,10 +1036,24 @@
                 } else if (type === "file") {
                     const link = document.createElement("a");
                     link.className = "file-link";
-                    link.textContent = `Download ${fileName || "file"}`;
+                    link.textContent = `📎 ${fileName || "file"}`;
                     link.download = fileName || "studybuddy-file";
                     link.href = text || "#";
+                    // Open PDFs and images in a new tab for viewing
+                    if (fileName && /\.(pdf|png|jpg|jpeg|gif|webp)$/i.test(fileName)) {
+                        link.target = "_blank";
+                        link.rel = "noopener noreferrer";
+                        link.removeAttribute("download");
+                    }
                     bubble.appendChild(link);
+                } else if (type === "file_stub") {
+                    // File shared during a previous session — base64 data is not stored
+                    const notice = document.createElement("div");
+                    notice.className = "file-link";
+                    notice.style.cursor = "default";
+                    notice.style.opacity = "0.7";
+                    notice.innerHTML = `📎 <strong>${fileName || "file"}</strong><br><small style="font-size:0.72rem;">Shared during session · re-share to download again</small>`;
+                    bubble.appendChild(notice);
                 } else {
                     const message = document.createElement("div");
                     message.className = "chat-text";
@@ -1698,7 +1732,26 @@
         fetchIceConfig().then(() => startLocalVideo()).then(connectSocket);
     }
 
+    function setupThemeToggler() {
+        const toggleBtn = document.getElementById("theme-toggle-btn");
+        if (!toggleBtn) return;
+
+        // Sync initial button icon
+        const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+        toggleBtn.textContent = currentTheme === "dark" ? "🌙" : "☀️";
+
+        toggleBtn.addEventListener("click", () => {
+            const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+            const newTheme = currentTheme === "dark" ? "light" : "dark";
+
+            document.documentElement.setAttribute("data-theme", newTheme);
+            localStorage.setItem("theme", newTheme);
+            toggleBtn.textContent = newTheme === "dark" ? "🌙" : "☀️";
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
+        setupThemeToggler();
         const page = document.body.dataset.page;
 
         if (page === "home") initHome();

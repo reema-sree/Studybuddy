@@ -4,17 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Opening Room - Study Buddy</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-            --bg: #0b0f1a; --card: #18202f; --border: rgba(255,255,255,0.07);
-            --accent: #f0a030; --text: #dce6f5; --text-muted: #5a6a85;
+            --bg: #f8fafc; --card: #ffffff; --border: rgba(15,23,42,0.08);
+            --accent: #d97706; --text: #0f172a; --text-muted: #475569;
             --font-display: 'Playfair Display', Georgia, serif;
             --font-body: 'Sora', system-ui, sans-serif;
             --radius: 14px;
+        }
+        [data-theme="dark"] {
+            --bg: #0b0f1a; --card: #18202f; --border: rgba(255,255,255,0.07);
+            --accent: #f0a030; --text: #dce6f5; --text-muted: #5a6a85;
         }
         body {
             font-family: var(--font-body);

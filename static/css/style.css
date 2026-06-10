@@ -3,6 +3,24 @@
 }
 
 :root {
+    --bg: #f8fafc;
+    --panel: rgba(15, 23, 42, 0.04);
+    --panel-strong: rgba(15, 23, 42, 0.07);
+    --line: rgba(15, 23, 42, 0.09);
+    --text: #0f172a;
+    --muted: #475569;
+    --primary: #7c3aed;
+    --primary-2: #2563eb;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --topbar-bg: rgba(255, 255, 255, 0.8);
+    --btn-ghost-bg: rgba(0, 0, 0, 0.05);
+    --chat-panel-bg: rgba(0, 0, 0, 0.03);
+    --chat-messages-bg: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="dark"] {
     --bg: #080a12;
     --panel: rgba(255, 255, 255, 0.055);
     --panel-strong: rgba(255, 255, 255, 0.09);
@@ -14,6 +32,10 @@
     --green: #10b981;
     --red: #ef4444;
     --yellow: #f59e0b;
+    --topbar-bg: rgba(0, 0, 0, 0.42);
+    --btn-ghost-bg: rgba(255, 255, 255, 0.08);
+    --chat-panel-bg: rgba(0, 0, 0, 0.28);
+    --chat-messages-bg: rgba(0, 0, 0, 0.2);
 }
 
 html,
@@ -68,7 +90,7 @@ button {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    background: rgba(0, 0, 0, 0.42);
+    background: var(--topbar-bg);
     border-bottom: 1px solid var(--line);
     position: sticky;
     top: 0;
@@ -196,7 +218,8 @@ select option {
 }
 
 .btn-ghost {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--btn-ghost-bg);
+    color: var(--text);
 }
 
 .btn.icon {
@@ -419,7 +442,7 @@ select option {
     border-left: 1px solid var(--line);
     background:
         linear-gradient(180deg, rgba(124, 58, 237, 0.08), transparent 160px),
-        rgba(0, 0, 0, 0.28);
+        var(--chat-panel-bg);
 }
 
 .chat-header {
@@ -458,7 +481,7 @@ select option {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--chat-messages-bg);
     border: 1px solid var(--line);
     border-radius: 16px;
     padding: 14px;
