@@ -975,9 +975,9 @@
         // --- Soundboard Audio Setup ---
         const audioStreams = {
             lofi: new Audio("https://stream.zeno.fm/0r0xa792kwzuv"),
-            rain: new Audio("https://www.soundjay.com/nature/sounds/rain-07.mp3"),
-            cafe: new Audio("https://www.soundjay.com/misc/sounds/coffee-shop-1.mp3"),
-            forest: new Audio("https://www.soundjay.com/nature/sounds/forest-wind-01.mp3")
+            rain: new Audio("https://actions.google.com/sounds/v1/weather/rain_heavy_loud.ogg"),
+            cafe: new Audio("https://actions.google.com/sounds/v1/crowds/restaurant_ambience.ogg"),
+            forest: new Audio("https://actions.google.com/sounds/v1/nature/forest_ambience.ogg")
         };
 
         Object.values(audioStreams).forEach(audio => {
