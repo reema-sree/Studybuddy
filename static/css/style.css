@@ -10,39 +10,39 @@
     padding: 0;
 }
 
-/* ─── Design Tokens (Light Mode) ─────────────────────────── */
+/* ─── Design Tokens (Light Mode - High Contrast, Pastel Vibrant) ─────────────────────────── */
 :root {
     /* Backgrounds */
-    --bg:            #fafafa;
+    --bg:            #f5f7fc;
     --surface:       #ffffff;
-    --card:          #f4f4f5;
-    --panel:         rgba(9, 9, 11, 0.04);
-    --panel-strong:  rgba(9, 9, 11, 0.07);
+    --card:          #ffffff;
+    --panel:         #eef2ff;
+    --panel-strong:  #e0e7ff;
 
-    /* Borders */
-    --border:        rgba(9, 9, 11, 0.08);
-    --border-mid:    rgba(9, 9, 11, 0.12);
-    --line:          rgba(9, 9, 11, 0.08);
+    /* Borders (Highly defined contrast) */
+    --border:        #d1d5db;
+    --border-mid:    #9ca3af;
+    --line:          #e5e7eb;
 
-    /* Brand / Accent */
-    --accent:        #6366f1;
-    --accent-dim:    rgba(99, 102, 241, 0.10);
-    --primary:       #6366f1;
-    --primary-2:     #4f46e5;
+    /* Brand / Accent (Vivid, highly readable) */
+    --accent:        #4f46e5;
+    --accent-dim:    #e0e7ff;
+    --primary:       #4f46e5;
+    --primary-2:     #3730a3;
 
     /* Semantic */
-    --green:         #10b981;
-    --green-dim:     rgba(16, 185, 129, 0.10);
-    --red:           #ef4444;
-    --red-dim:       rgba(239, 68, 68, 0.10);
-    --yellow:        #f59e0b;
-    --yellow-dim:    rgba(245, 158, 11, 0.10);
+    --green:         #059669;
+    --green-dim:     #d1fae5;
+    --red:           #dc2626;
+    --red-dim:       #fee2e2;
+    --yellow:        #d97706;
+    --yellow-dim:    #fef3c7;
 
-    /* Text */
-    --text:          #09090b;
-    --muted:         #52525b;
-    --text-muted:    #52525b;
-    --text-faint:    #a1a1aa;
+    /* Text (Premium High Contrast) */
+    --text:          #111827;
+    --muted:         #374151;
+    --text-muted:    #4b5563;
+    --text-faint:    #6b7280;
 
     /* Typography */
     --font-display:  'Playfair Display', Georgia, serif;
@@ -52,62 +52,62 @@
     /* Shape & Shadow */
     --radius:        14px;
     --radius-sm:     8px;
-    --shadow:        0 8px 30px rgba(0, 0, 0, 0.04);
-    --glow-accent:   0 0 24px rgba(99, 102, 241, 0.15);
-    --glow-green:    0 0 24px rgba(16, 185, 129, 0.15);
+    --shadow:        0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    --glow-accent:   0 0 20px rgba(79, 70, 229, 0.25);
+    --glow-green:    0 0 20px rgba(5, 150, 105, 0.25);
 
     /* Component-level overrides */
-    --topbar-bg:        rgba(255, 255, 255, 0.92);
-    --btn-ghost-bg:     rgba(9, 9, 11, 0.05);
-    --chat-panel-bg:    rgba(9, 9, 11, 0.02);
-    --chat-messages-bg: rgba(9, 9, 11, 0.02);
-    --grid-line:        rgba(9, 9, 11, 0.025);
-    --glow-color:       rgba(99, 102, 241, 0.05);
+    --topbar-bg:        rgba(255, 255, 255, 0.95);
+    --btn-ghost-bg:     #e2e8f0;
+    --chat-panel-bg:    #f8fafc;
+    --chat-messages-bg: #ffffff;
+    --grid-line:        rgba(79, 70, 229, 0.06);
+    --glow-color:       rgba(79, 70, 229, 0.1);
 
     /* Study room layout */
     --topbar-h:  60px;
     --chat-w:    380px;
 }
 
-/* ─── Dark Mode ───────────────────────────────────────────── */
+/* ─── Dark Mode (Deep Space Indigo - Deep Zinc Contrast) ───────────────────────────── */
 [data-theme="dark"] {
-    --bg:            #09090b;
-    --surface:       #18181b;
-    --card:          #27272a;
-    --panel:         rgba(255, 255, 255, 0.055);
-    --panel-strong:  rgba(255, 255, 255, 0.09);
+    --bg:            #0b0f19;
+    --surface:       #111827;
+    --card:          #1f2937;
+    --panel:         #1e1b4b;
+    --panel-strong:  #312e81;
 
-    --border:        rgba(255, 255, 255, 0.08);
-    --border-mid:    rgba(255, 255, 255, 0.12);
-    --line:          rgba(255, 255, 255, 0.12);
+    --border:        #374151;
+    --border-mid:    #4b5563;
+    --line:          #374151;
 
     --accent:        #818cf8;
-    --accent-dim:    rgba(129, 140, 248, 0.15);
-    --primary:       #818cf8;
-    --primary-2:     #6366f1;
+    --accent-dim:    rgba(129, 140, 248, 0.2);
+    --primary:       #6366f1;
+    --primary-2:     #4f46e5;
 
-    --green:         #34d399;
-    --green-dim:     rgba(52, 211, 153, 0.15);
-    --red:           #f87171;
-    --red-dim:       rgba(248, 113, 113, 0.15);
+    --green:         #10b981;
+    --green-dim:     rgba(16, 185, 129, 0.2);
+    --red:           #ef4444;
+    --red-dim:       rgba(239, 68, 68, 0.2);
     --yellow:        #fbbf24;
-    --yellow-dim:    rgba(251, 191, 36, 0.15);
+    --yellow-dim:    rgba(251, 191, 36, 0.2);
 
-    --text:          #fafafa;
-    --muted:         #a1a1aa;
-    --text-muted:    #a1a1aa;
-    --text-faint:    #52525b;
+    --text:          #f9fafb;
+    --muted:         #d1d5db;
+    --text-muted:    #9ca3af;
+    --text-faint:    #6b7280;
 
-    --shadow:        0 8px 30px rgba(0, 0, 0, 0.40);
-    --glow-accent:   0 0 24px rgba(129, 140, 248, 0.25);
-    --glow-green:    0 0 24px rgba(52, 211, 153, 0.25);
+    --shadow:        0 15px 35px -5px rgba(0, 0, 0, 0.5), 0 10px 15px -8px rgba(0, 0, 0, 0.5);
+    --glow-accent:   0 0 25px rgba(99, 102, 241, 0.35);
+    --glow-green:    0 0 25px rgba(16, 185, 129, 0.35);
 
-    --topbar-bg:        rgba(9, 9, 11, 0.88);
-    --btn-ghost-bg:     rgba(255, 255, 255, 0.08);
-    --chat-panel-bg:    rgba(0, 0, 0, 0.20);
-    --chat-messages-bg: rgba(0, 0, 0, 0.15);
-    --grid-line:        rgba(255, 255, 255, 0.02);
-    --glow-color:       rgba(129, 140, 248, 0.08);
+    --topbar-bg:        rgba(17, 24, 39, 0.95);
+    --btn-ghost-bg:     rgba(255, 255, 255, 0.1);
+    --chat-panel-bg:    #0f172a;
+    --chat-messages-bg: #090d16;
+    --grid-line:        rgba(129, 140, 248, 0.05);
+    --glow-color:       rgba(129, 140, 248, 0.15);
 }
 
 /* ─── Base HTML ───────────────────────────────────────────── */
