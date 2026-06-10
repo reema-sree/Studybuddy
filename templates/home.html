@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Study Buddy</title>
+    <meta name="description" content="Study Buddy — collaborative video study rooms for students. Match with peers, share notes, and get AI-powered study help.">
+    <title>Study Buddy — Focused Learning Together</title>
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'light';
@@ -12,484 +13,11 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --bg:            #f8fafc;
-            --surface:       #ffffff;
-            --card:          #f1f5f9;
-            --border:        rgba(15,23,42,0.08);
-            --accent:        #d97706;
-            --accent-dim:    rgba(217,119,6,0.1);
-            --green:         #059669;
-            --green-dim:     rgba(5,150,105,0.1);
-            --red:           #dc2626;
-            --red-dim:       rgba(220,38,38,0.1);
-            --text:          #0f172a;
-            --text-muted:    #475569;
-            --text-faint:    #94a3b8;
-            --font-display:  'Playfair Display', Georgia, serif;
-            --font-body:     'Sora', system-ui, sans-serif;
-            --font-mono:     'JetBrains Mono', monospace;
-            --radius:        14px;
-            --radius-sm:     8px;
-            --shadow:        0 8px 32px rgba(15,23,42,0.06);
-            --glow-accent:   0 0 24px rgba(217,119,6,0.15);
-            --glow-green:    0 0 24px rgba(5,150,105,0.15);
-            --grid-line:     rgba(15,23,42,0.015);
-            --glow-color:    rgba(217,119,6,0.04);
-        }
-
-        [data-theme="dark"] {
-            --bg:            #0b0f1a;
-            --surface:       #111827;
-            --card:          #18202f;
-            --border:        rgba(255,255,255,0.07);
-            --accent:        #f0a030;
-            --accent-dim:    rgba(240,160,48,0.12);
-            --green:         #3ecf8e;
-            --green-dim:     rgba(62,207,142,0.12);
-            --red:           #f87171;
-            --red-dim:       rgba(248,113,113,0.12);
-            --text:          #dce6f5;
-            --text-muted:    #5a6a85;
-            --text-faint:    #3a4a60;
-            --shadow:        0 8px 32px rgba(0,0,0,0.5);
-            --glow-accent:   0 0 24px rgba(240,160,48,0.2);
-            --glow-green:    0 0 24px rgba(62,207,142,0.2);
-            --grid-line:     rgba(255,255,255,0.015);
-            --glow-color:    rgba(240,160,48,0.06);
-        }
-
-        html { scroll-behavior: smooth; }
-
-        body {
-            font-family: var(--font-body);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            font-size: 15px;
-            line-height: 1.65;
-            overflow-x: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(var(--grid-line) 1px, transparent 1px),
-                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        body::after {
-            content: '';
-            position: fixed;
-            top: -200px;
-            right: -100px;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .hidden { display: none !important; }
-
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 0 32px;
-            height: 64px;
-            background: rgba(11,15,26,0.85);
-            border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-        }
-
-        .brand { display: flex; align-items: center; gap: 14px; flex: 1; }
-
-        .brand-mark {
-            width: 40px; height: 40px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--accent) 0%, #e08000 100%);
-            display: flex; align-items: center; justify-content: center;
-            font-family: var(--font-display);
-            font-size: 14px; font-weight: 700; color: #0b0f1a;
-            box-shadow: var(--glow-accent);
-            flex-shrink: 0;
-        }
-
-        .brand-title {
-            font-family: var(--font-display);
-            font-size: 18px; font-weight: 700;
-            color: var(--text); line-height: 1.1;
-        }
-
-        .brand-subtitle { font-size: 11px; color: var(--text-muted); font-weight: 300; letter-spacing: 0.03em; }
-
-        .btn {
-            display: inline-flex; align-items: center; justify-content: center;
-            gap: 6px; padding: 9px 20px;
-            border-radius: var(--radius-sm);
-            font-family: var(--font-body); font-size: 13px; font-weight: 600;
-            border: none; cursor: pointer;
-            transition: all 0.18s ease;
-            white-space: nowrap; letter-spacing: 0.02em;
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn-primary { background: var(--accent); color: #0b0f1a; }
-        .btn-primary:hover { background: #ffb340; box-shadow: var(--glow-accent); }
-        .btn-green { background: var(--green); color: #0b0f1a; }
-        .btn-green:hover { background: #4fd99a; box-shadow: var(--glow-green); }
-        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-        .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--text); border-color: rgba(255,255,255,0.14); }
-
-        .user-chip {
-            display: flex; align-items: center; gap: 12px;
-            padding: 6px 14px 6px 8px;
-            border-radius: 40px;
-            background: var(--card); border: 1px solid var(--border);
-        }
-
-        .avatar {
-            width: 32px; height: 32px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), #e08000);
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 700; font-size: 13px; color: #0b0f1a; flex-shrink: 0;
-        }
-
-        #username-display { font-size: 13px; font-weight: 500; }
-
-        .badge {
-            font-size: 10px;
-            background: var(--green-dim); color: var(--green);
-            border: 1px solid rgba(62,207,142,0.2);
-            padding: 2px 8px; border-radius: 20px;
-            font-weight: 600; letter-spacing: 0.04em;
-        }
-
-        .page {
-            max-width: 1180px; margin: 0 auto;
-            padding: 60px 24px;
-            position: relative; z-index: 1;
-        }
-
-        .page::before {
-            content: 'Study Buddy';
-            position: absolute; top: -10px; left: 24px;
-            font-family: var(--font-display);
-            font-size: clamp(80px, 12vw, 160px); font-weight: 700;
-            color: rgba(255,255,255,0.015);
-            pointer-events: none; white-space: nowrap;
-            letter-spacing: -4px; line-height: 1; user-select: none;
-        }
-
-        .hero-grid {
-            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 20px; position: relative;
-        }
-
-        .dashboard-panel {
-            margin-bottom: 22px;
-            background:
-                linear-gradient(135deg, rgba(240,160,48,0.13), rgba(62,207,142,0.08)),
-                var(--card);
-            border: 1px solid rgba(255,255,255,0.09);
-            border-radius: var(--radius);
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-            animation: fadeUp 0.4s ease both;
-        }
-        .dashboard-panel::before {
-            content: '';
-            position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent), var(--green), transparent);
-        }
-        .dashboard-head {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 18px;
-        }
-        .dashboard-title {
-            font-family: var(--font-display);
-            font-size: 24px;
-            font-weight: 700;
-            line-height: 1.1;
-            color: var(--text);
-        }
-        .dashboard-copy {
-            margin-top: 6px;
-            color: var(--text-muted);
-            font-size: 13px;
-            font-weight: 300;
-        }
-        .streak-pill {
-            flex-shrink: 0;
-            padding: 6px 12px;
-            border-radius: 999px;
-            border: 1px solid rgba(62,207,142,0.22);
-            background: var(--green-dim);
-            color: var(--green);
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .stat-card {
-            min-height: 96px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 16px;
-            border-radius: var(--radius-sm);
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(11,15,26,0.58);
-        }
-        .stat-card strong {
-            font-family: var(--font-mono);
-            font-size: 26px;
-            line-height: 1;
-            color: var(--text);
-        }
-        .stat-card span {
-            color: var(--text-muted);
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-        .stat-card.points {
-            border-color: rgba(240,160,48,0.28);
-            background: linear-gradient(135deg, rgba(240,160,48,0.16), rgba(240,160,48,0.05));
-        }
-        .stat-card.points strong { color: var(--accent); }
-        .stat-card.days {
-            border-color: rgba(62,207,142,0.24);
-            background: linear-gradient(135deg, rgba(62,207,142,0.12), rgba(62,207,142,0.04));
-        }
-        .stat-card.days strong { color: var(--green); }
-
-        .notes-history-panel {
-            margin-bottom: 22px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-            animation: fadeUp 0.4s ease both;
-        }
-        .notes-history-panel::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(62,207,142,0.9), transparent);
-        }
-        .notes-history-head {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-        .notes-history-title {
-            font-family: var(--font-display);
-            font-size: 22px;
-            line-height: 1.1;
-            color: var(--text);
-        }
-        .notes-history-copy {
-            margin-top: 6px;
-            color: var(--text-muted);
-            font-size: 13px;
-            font-weight: 300;
-        }
-        .notes-count {
-            flex-shrink: 0;
-            padding: 6px 12px;
-            border-radius: 999px;
-            background: var(--accent-dim);
-            color: var(--accent);
-            border: 1px solid rgba(240,160,48,0.22);
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-        .notes-history-list {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .note-history-card {
-            min-height: 138px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 16px;
-            border-radius: var(--radius-sm);
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(11,15,26,0.52);
-        }
-        .note-history-card strong {
-            color: var(--text);
-            font-size: 14px;
-            line-height: 1.35;
-        }
-        .note-history-card p {
-            color: var(--text-muted);
-            font-size: 12px;
-            line-height: 1.5;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .note-history-meta {
-            margin-top: auto;
-            color: var(--text-faint);
-            font-family: var(--font-mono);
-            font-size: 10px;
-            letter-spacing: 0.02em;
-        }
-        .notes-empty {
-            grid-column: 1 / -1;
-            padding: 18px;
-            border-radius: var(--radius-sm);
-            border: 1px dashed rgba(255,255,255,0.12);
-            color: var(--text-muted);
-            background: rgba(255,255,255,0.035);
-            font-size: 13px;
-        }
-
-        @media (max-width: 900px) {
-            .hero-grid { grid-template-columns: 1fr; }
-            .dashboard-head { flex-direction: column; }
-            .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .notes-history-head { flex-direction: column; }
-            .notes-history-list { grid-template-columns: 1fr; }
-        }
-
-        @media (max-width: 640px) {
-            .topbar { padding: 0 16px; }
-            .page { padding: 32px 16px; }
-        }
-
-        .panel {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 32px;
-            transition: border-color 0.2s;
-            position: relative; overflow: hidden;
-            min-width: 0;
-            animation: fadeUp 0.4s ease both;
-        }
-        .panel::before {
-            content: '';
-            position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
-        }
-        .panel:hover { border-color: rgba(255,255,255,0.12); }
-        .hero-grid .panel:nth-child(2) { animation-delay: 0.08s; }
-
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(16px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .panel-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 10px; line-height: 1.2; }
-        .panel-copy { font-size: 13.5px; color: var(--text-muted); margin-bottom: 24px; font-weight: 300; }
-
-        .field-stack { display: flex; flex-direction: column; gap: 10px; }
-
-        .input, select#match-subject {
-            width: 100%; padding: 11px 15px;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: var(--radius-sm); color: var(--text);
-            font-family: var(--font-body); font-size: 14px;
-            transition: border-color 0.18s, box-shadow 0.18s;
-            outline: none; appearance: none; -webkit-appearance: none;
-        }
-        .input::placeholder { color: var(--text-faint); }
-        .input:focus, select#match-subject:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,160,48,0.1); }
-
-        select#match-subject {
-            cursor: pointer;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6a85' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-            background-repeat: no-repeat; background-position: right 14px center;
-        }
-
-        select#match-subject option[value=""] { color: var(--text-faint); }
-
-        .status {
-            display: flex; align-items: center; gap: 10px;
-            padding: 12px 16px;
-            background: var(--accent-dim); border: 1px solid rgba(240,160,48,0.2);
-            border-radius: var(--radius-sm); font-size: 13px; color: var(--accent);
-        }
-        #matching-message::before {
-            content: ''; display: inline-block;
-            width: 6px; height: 6px; border-radius: 50%;
-            background: var(--accent); margin-right: 8px;
-            animation: pulse 1.2s ease-in-out infinite;
-        }
-        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
-
-        .queue-note { margin-top: 18px; font-size: 12px; color: var(--text-faint); text-align: center; }
-        .queue-note a { color: var(--accent); text-decoration: none; }
-        .queue-note a:hover { text-decoration: underline; }
-        #queue-count { font-family: var(--font-mono); font-weight: 500; color: var(--green); }
-
-        .divider {
-            display: flex; align-items: center; gap: 12px;
-            font-size: 11px; font-weight: 600; color: var(--text-faint);
-            letter-spacing: 0.08em; margin: 16px 0;
-        }
-        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-        .join-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-        #join-code-input { font-family: var(--font-mono); font-size: 15px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; flex: 1; }
-
-        .modal {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 200; padding: 24px;
-        }
-
-        .modal-card {
-            background: var(--card); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius); padding: 36px;
-            width: 100%; max-width: 420px; box-shadow: var(--shadow);
-            position: relative;
-        }
-        .modal-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-        }
-        .modal-card .panel-copy { margin-bottom: 20px; }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <!-- FIX: data-page stays on body so app.js (document.body.dataset.page) detects it correctly -->
-<body data-page="home">
+<body class="bg-grid" data-page="home">
 
     <nav class="topbar">
         <div class="brand">
@@ -499,7 +27,7 @@
                 <p class="brand-subtitle">2–3 person video study rooms</p>
             </div>
         </div>
-        <button id="theme-toggle-btn" class="btn btn-ghost" style="padding: 9px 12px; font-size: 16px; margin-right: 8px;" aria-label="Toggle Theme">☀️</button>
+        <button id="theme-toggle-btn" class="btn btn-ghost icon" style="font-size: 16px; margin-right: 8px;" aria-label="Toggle Theme">☀️</button>
         <button id="signin-btn" class="btn btn-primary">Sign In</button>
         <div id="user-profile" class="user-chip hidden">
             <div id="user-avatar" class="avatar" aria-label="User avatar">U</div>
@@ -521,6 +49,21 @@
                 </div>
                 <span class="streak-pill" data-stat="streakLabel">0 day streak</span>
             </div>
+
+            <!-- Gamified XP Progress Card -->
+            <div class="xp-progress-card">
+                <div class="xp-card-header">
+                    <div class="level-info">
+                        <span class="level-badge" id="lvl-badge-val">Lvl 1</span>
+                        <span class="level-name" id="lvl-name-val">Study Novice</span>
+                    </div>
+                    <span class="xp-text" id="xp-text-val">0 / 100 XP</span>
+                </div>
+                <div class="xp-bar-outer">
+                    <div class="xp-bar-inner" id="xp-bar-val" style="width: 0%;"></div>
+                </div>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card">
                     <strong data-stat="focusHours">0.00</strong>
@@ -559,7 +102,7 @@
                 <h2 class="panel-title">Find Study Partners</h2>
                 <p class="panel-copy">Match with students studying the same subject and start a focused video room.</p>
                 <div class="field-stack">
-                    <select id="match-subject" data-subject-select aria-label="Select subject">
+                    <select id="match-subject" class="input" data-subject-select aria-label="Select subject">
                         <option value="" disabled selected>Select a subject...</option>
                     </select>
                     <button id="match-btn" class="btn btn-green">Match with Students</button>
@@ -577,7 +120,7 @@
                 <button id="create-room-btn" class="btn btn-primary">Create Private Room</button>
                 <div class="divider">OR</div>
                 <div class="join-row">
-                    <input id="join-code-input" class="input" type="text" placeholder="ROOM CODE" maxlength="6" aria-label="Room code">
+                    <input id="join-code-input" class="input" type="text" placeholder="ROOM CODE" maxlength="6" aria-label="Room code" style="font-family: var(--font-mono); font-size: 15px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase;">
                     <button id="join-room-btn" class="btn btn-green">Join</button>
                 </div>
             </div>
@@ -605,16 +148,16 @@
                     <input id="auth-newpass" class="input" type="password" placeholder="New password (min 6 characters)">
                 </div>
                 <!-- Error message -->
-                <p id="auth-error" style="color:#f87171;font-size:13px;min-height:18px;margin:0;"></p>
+                <p id="auth-error" style="color:var(--red);font-size:13px;min-height:18px;margin:0;"></p>
                 <button id="auth-submit" class="btn btn-primary">Sign In</button>
                 <button id="auth-cancel" class="btn btn-ghost">Cancel</button>
                 <!-- Toggle register/login -->
-                <div id="auth-switch-wrap" style="text-align:center;font-size:12px;color:#5a6a85;">
-                    <a id="auth-switch-link" href="#" style="color:#f0a030;text-decoration:none;">No account? Register</a>
+                <div style="text-align:center;font-size:12px;color:var(--text-faint);">
+                    <a id="auth-switch-link" href="#" style="color:var(--accent);text-decoration:none;">No account? Register</a>
                 </div>
                 <!-- Forgot password -->
                 <div style="text-align:center;font-size:12px;">
-                    <a id="auth-forgot-link" href="#" style="color:#5a6a85;text-decoration:none;">Forgot password?</a>
+                    <a id="auth-forgot-link" href="#" style="color:var(--text-faint);text-decoration:none;">Forgot password?</a>
                 </div>
             </div>
         </div>

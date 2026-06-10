@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - Study Buddy</title>
+    <meta name="description" content="Sign in or create an account on Study Buddy to access collaborative study rooms.">
+    <title>Sign In — Study Buddy</title>
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'light';
@@ -13,105 +14,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg: #f8fafc; --surface: #ffffff; --card: #f1f5f9;
-            --border: rgba(15,23,42,0.08); --accent: #d97706;
-            --text: #0f172a; --text-muted: #475569; --text-faint: #94a3b8;
-            --font-display: 'Playfair Display', Georgia, serif;
-            --font-body: 'Sora', system-ui, sans-serif;
-            --radius: 14px; --radius-sm: 8px;
-            --shadow: 0 24px 64px rgba(15,23,42,0.08);
-            --glow-accent: 0 0 32px rgba(217,119,6,0.15);
-        }
-        [data-theme="dark"] {
-            --bg: #0b0f1a; --surface: #111827; --card: #18202f;
-            --border: rgba(255,255,255,0.07); --accent: #f0a030;
-            --text: #dce6f5; --text-muted: #5a6a85; --text-faint: #3a4a60;
-            --shadow: 0 24px 64px rgba(0,0,0,0.6);
-            --glow-accent: 0 0 32px rgba(240,160,48,0.18);
-        }
-        body {
-            font-family: var(--font-body);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            font-size: 15px;
-            line-height: 1.65;
-        }
-        body::before {
-            content: ''; position: fixed; inset: 0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-            background-size: 40px 40px; pointer-events: none;
-        }
-        body::after {
-            content: ''; position: fixed;
-            top: -200px; right: -100px;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(240,160,48,0.06) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hidden { display: none !important; }
-        .center-page {
-            min-height: 100vh; display: flex; align-items: center;
-            justify-content: center; padding: 24px; position: relative; z-index: 1;
-        }
-        .panel {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 40px;
-            position: relative; overflow: hidden;
-        }
-        .panel::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-        }
-        .login-card { width: 100%; max-width: 420px; box-shadow: var(--shadow); animation: fadeUp 0.45s ease both; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .brand { display: flex; align-items: center; gap: 14px; }
-        .brand-mark {
-            width: 44px; height: 44px; border-radius: 12px;
-            background: linear-gradient(135deg, var(--accent) 0%, #e08000 100%);
-            display: flex; align-items: center; justify-content: center;
-            font-family: var(--font-display); font-size: 15px; font-weight: 700;
-            color: #0b0f1a; box-shadow: var(--glow-accent); flex-shrink: 0;
-        }
-        .brand-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.1; }
-        .brand-subtitle { font-size: 12px; color: var(--text-muted); font-weight: 300; }
-        .field-stack { display: flex; flex-direction: column; gap: 12px; }
-        .input {
-            width: 100%; padding: 12px 16px;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: var(--radius-sm); color: var(--text);
-            font-family: var(--font-body); font-size: 14px; outline: none;
-            transition: border-color 0.18s, box-shadow 0.18s;
-        }
-        .input::placeholder { color: var(--text-faint); }
-        .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,160,48,0.1); }
-        .btn {
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 11px 20px; border-radius: var(--radius-sm);
-            font-family: var(--font-body); font-size: 14px; font-weight: 600;
-            border: none; cursor: pointer; transition: all 0.18s ease; letter-spacing: 0.02em;
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn-primary { background: var(--accent); color: #0b0f1a; }
-        .btn-primary:hover { background: #ffb340; box-shadow: var(--glow-accent); }
-        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-        .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--text); }
-        .queue-note { margin-top: 20px; font-size: 12px; color: var(--text-faint); text-align: center; }
-        .queue-note a { color: var(--accent); text-decoration: none; font-weight: 500; }
-        .queue-note a:hover { text-decoration: underline; }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<!-- FIX: removed class="app-shell" — body.app-shell in style.css was overriding the background with a purple gradient due to higher CSS specificity -->
-<body data-page="login">
+<!-- FIX: removed class="app-shell" — body.app-shell in style.css was overriding the background -->
+<body class="bg-grid" data-page="login">
     <main class="center-page">
         <section class="panel login-card">
-            <div class="brand" style="margin-bottom: 28px;">
-                <div class="brand-mark">SB</div>
+            <div class="brand" style="flex: unset; margin-bottom: 28px;">
+                <div class="brand-mark" style="box-shadow: var(--glow-accent);">SB</div>
                 <div>
                     <h1 id="login-title" class="brand-title">Sign In</h1>
                     <p id="login-copy" class="brand-subtitle">Welcome back to Study Buddy</p>
@@ -134,11 +44,11 @@
                 <div id="login-newpass-wrap" class="hidden">
                     <input id="login-newpass" class="input" type="password" placeholder="New password (min 6 characters)">
                 </div>
-                <p id="login-error" style="color:#f87171;font-size:13px;min-height:18px;margin:0;"></p>
+                <p id="login-error" style="color:var(--red);font-size:13px;min-height:18px;margin:0;"></p>
                 <button id="login-submit" class="btn btn-primary">Sign In</button>
             </div>
             <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;align-items:center;">
-                <a id="login-switch-link" href="#" onclick="return false;" class="queue-note" style="color:#f0a030;">No account yet? Register</a>
+                <a id="login-switch-link" href="#" onclick="return false;" class="queue-note" style="color:var(--accent);">No account yet? Register</a>
                 <a id="login-forgot-link" href="#" onclick="return false;" class="queue-note">Forgot password?</a>
                 <a href="/" class="queue-note">← Back to home</a>
             </div>

@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Opening Room - Study Buddy</title>
+    <meta name="description" content="Opening your Study Buddy study room. Please wait.">
+    <title>Opening Room — Study Buddy</title>
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'light';
@@ -13,81 +14,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg: #f8fafc; --card: #ffffff; --border: rgba(15,23,42,0.08);
-            --accent: #d97706; --text: #0f172a; --text-muted: #475569;
-            --font-display: 'Playfair Display', Georgia, serif;
-            --font-body: 'Sora', system-ui, sans-serif;
-            --radius: 14px;
-        }
-        [data-theme="dark"] {
-            --bg: #0b0f1a; --card: #18202f; --border: rgba(255,255,255,0.07);
-            --accent: #f0a030; --text: #dce6f5; --text-muted: #5a6a85;
-        }
-        body {
-            font-family: var(--font-body);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        body::before {
-            content: ''; position: fixed; inset: 0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-            background-size: 40px 40px; pointer-events: none;
-        }
-        body::after {
-            content: ''; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 500px; height: 500px;
-            background: radial-gradient(circle, rgba(240,160,48,0.07) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hidden { display: none !important; }
-        .center-page {
-            min-height: 100vh; display: flex; align-items: center;
-            justify-content: center; padding: 24px; position: relative; z-index: 1;
-        }
-        .panel {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 48px 52px; text-align: center;
-            position: relative; overflow: hidden; animation: fadeUp 0.4s ease both;
-        }
-        .panel::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-        }
-        .login-card { width: 100%; max-width: 400px; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .spinner {
-            width: 48px; height: 48px;
-            border: 2px solid rgba(255,255,255,0.06); border-top-color: var(--accent);
-            border-radius: 50%; margin: 0 auto 28px;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-dots { display: inline-flex; gap: 5px; margin-top: 12px; }
-        .loading-dots span {
-            width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted);
-            animation: blink 1.2s ease-in-out infinite;
-        }
-        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
-        .panel-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-        .panel-copy { font-size: 13.5px; color: var(--text-muted); font-weight: 300; }
+        /* Loading page specific: body is the flex center, no scroll needed */
+        html, body { height: 100%; overflow: hidden; }
+        body { display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
-<!-- FIX: removed class="app-shell" — body.app-shell in style.css was overriding the background with a purple gradient due to higher CSS specificity -->
-<body data-page="room">
+<!-- FIX: removed class="app-shell" — body.app-shell in style.css was overriding the background -->
+<body class="bg-grid bg-grid-center" data-page="room">
     <main class="center-page">
-        <section class="panel login-card">
+        <section class="panel login-card" style="text-align: center;">
             <div class="spinner"></div>
             <h1 class="panel-title">Opening study room</h1>
             <p class="panel-copy">Please wait

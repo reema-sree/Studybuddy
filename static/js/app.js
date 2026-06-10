@@ -49,6 +49,11 @@
 
     const $ = (id) => document.getElementById(id);
 
+    const ICON_VIDEO_ON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align: middle;"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg> Video On`;
+    const ICON_VIDEO_OFF = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align: middle;"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10l-2.66-2"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> Video Off`;
+    const ICON_AUDIO_ON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align: middle;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg> Audio On`;
+    const ICON_AUDIO_OFF = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align: middle;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 11a7 7 0 0 1-14 0v-2h2v2a5 5 0 0 0 10 0V9"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg> Audio Off`;
+
     function getUser() {
         try {
             return JSON.parse(localStorage.getItem("studybuddy_user") || "null");
@@ -227,7 +232,9 @@
             completedSessions: Number(raw?.completedSessions) || 0,
             notesShared: Number(raw?.notesShared) || 0,
             earlyLeaves: Number(raw?.earlyLeaves) || 0,
-            studyDates: [...new Set(studyDates)].sort()
+            studyDates: [...new Set(studyDates)].sort(),
+            xp: Number(raw?.xp) || 0,
+            level: Number(raw?.level) || 1
         };
     }
 
@@ -282,6 +289,14 @@
         });
     }
 
+    function levelTitle(lvl) {
+        if (lvl >= 10) return "Zen Master 🧘";
+        if (lvl >= 7)  return "Quantum Learner 🧠";
+        if (lvl >= 5)  return "Focus Knight ⚔️";
+        if (lvl >= 3)  return "Study Wizard 🧙";
+        return "Study Novice 🌱";
+    }
+
     function renderHomeDashboard(user) {
         const dashboard = $("home-dashboard");
         if (!dashboard) return;
@@ -301,6 +316,22 @@
         setStatsText("studyDays",     String(stats.studyDates.length));
         setStatsText("loyaltyPoints", String(statPoints(stats)));
         setStatsText("streakLabel",   `${streak} day${streak === 1 ? "" : "s"} streak`);
+
+        // Gamified Level & XP rendering
+        const lvl = stats.level || 1;
+        const xp = stats.xp || 0;
+        const targetXp = lvl * 100;
+        const pct = Math.min(100, Math.floor((xp / targetXp) * 100));
+
+        const badge = $("lvl-badge-val");
+        const name = $("lvl-name-val");
+        const xpText = $("xp-text-val");
+        const xpBar = $("xp-bar-val");
+
+        if (badge) badge.textContent = `Lvl ${lvl}`;
+        if (name) name.textContent = levelTitle(lvl);
+        if (xpText) xpText.textContent = `${xp} / ${targetXp} XP`;
+        if (xpBar) xpBar.style.width = `${pct}%`;
     }
 
     function readNotesForUser(user) {
@@ -926,6 +957,9 @@
 
         function recordFocusedSecond() {
             studyStats.focusSeconds += 1;
+            if (studyStats.focusSeconds % 6 === 0) {
+                addXp(1);
+            }
             markStudyDay();
             saveStudyStats();
         }
@@ -933,7 +967,193 @@
         function completeStudySession() {
             studyStats.completedSessions += 1;
             studyStats.completedSeconds += STUDY_SESSION_SECONDS;
+            addXp(100, true);
             markStudyDay();
+            saveStudyStats();
+        }
+
+        // --- Virtual Pet Logic ---
+        const buddyAvatar = $("buddy-avatar-wrap");
+        const buddyBubble = $("buddy-bubble-text");
+
+        const buddyStates = {
+            sleeping: `<svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="55" r="30" fill="#a78bfa" />
+                <polygon points="25,35 35,50 20,50" fill="#8b5cf6" />
+                <polygon points="75,35 65,50 80,50" fill="#8b5cf6" />
+                <path d="M38 58 Q43 62 48 58" stroke="#1e1b4b" stroke-width="3" stroke-linecap="round" fill="none" />
+                <path d="M52 58 Q57 62 62 58" stroke="#1e1b4b" stroke-width="3" stroke-linecap="round" fill="none" />
+                <path d="M48 65 L52 65 L50 67 Z" fill="#1e1b4b" />
+                <text x="75" y="30" font-family="monospace" font-size="16" fill="#8b5cf6" font-weight="bold" class="zzz">z</text>
+                <text x="65" y="20" font-family="monospace" font-size="12" fill="#c084fc" font-weight="bold" class="zzz-delayed">z</text>
+                <style>
+                    .zzz { animation: floatZzz 2s infinite ease-in-out; }
+                    .zzz-delayed { animation: floatZzz 2s infinite ease-in-out; animation-delay: 0.7s; }
+                    @keyframes floatZzz {
+                        0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
+                        50% { opacity: 1; }
+                        100% { transform: translate(10px, -20px) scale(1.2); opacity: 0; }
+                    }
+                </style>
+            </svg>`,
+            studying: `<svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="55" r="30" fill="#a78bfa" />
+                <polygon points="25,35 35,50 20,50" fill="#8b5cf6" />
+                <polygon points="75,35 65,50 80,50" fill="#8b5cf6" />
+                <circle cx="40" cy="55" r="8" stroke="#f59e0b" stroke-width="3" fill="none" />
+                <circle cx="60" cy="55" r="8" stroke="#f59e0b" stroke-width="3" fill="none" />
+                <line x1="48" y1="55" x2="52" y2="55" stroke="#f59e0b" stroke-width="3" />
+                <circle cx="40" cy="55" r="2" fill="#1e1b4b" />
+                <circle cx="60" cy="55" r="2" fill="#1e1b4b" />
+                <path d="M47 67 Q50 70 53 67" stroke="#1e1b4b" stroke-width="2" stroke-linecap="round" fill="none" />
+                <rect x="35" y="70" width="30" height="18" rx="2" fill="#ffffff" stroke="#1e1b4b" stroke-width="2" />
+                <line x1="50" y1="70" x2="50" y2="88" stroke="#1e1b4b" stroke-width="2" />
+                <circle cx="38" cy="74" r="4" fill="#c084fc" class="paw-left" />
+                <circle cx="62" cy="74" r="4" fill="#c084fc" class="paw-right" />
+                <style>
+                    .paw-left { animation: typePaw 0.4s infinite alternate ease-in-out; }
+                    .paw-right { animation: typePaw 0.4s infinite alternate ease-in-out; animation-delay: 0.2s; }
+                    @keyframes typePaw {
+                        0% { transform: translateY(0); }
+                        100% { transform: translateY(-3px); }
+                    }
+                </style>
+            </svg>`,
+            cheering: `<svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="55" r="30" fill="#a78bfa" />
+                <polygon points="25,32 35,47 20,47" fill="#8b5cf6" />
+                <polygon points="75,32 65,47 80,47" fill="#8b5cf6" />
+                <path d="M36 56 Q40 50 44 56" stroke="#1e1b4b" stroke-width="3" stroke-linecap="round" fill="none" />
+                <path d="M56 56 Q60 50 64 56" stroke="#1e1b4b" stroke-width="3" stroke-linecap="round" fill="none" />
+                <path d="M46 64 Q50 72 54 64 Z" fill="#b91c1c" stroke="#1e1b4b" stroke-width="2" />
+                <circle cx="25" cy="48" r="5" fill="#c084fc" class="paw-cheer" />
+                <circle cx="75" cy="48" r="5" fill="#c084fc" class="paw-cheer" />
+                <polygon points="50,10 52,15 57,17 52,19 50,24 48,19 43,17 48,15" fill="#fbbf24" class="sparkle" />
+                <style>
+                    .paw-cheer { animation: cheerPaws 0.5s infinite alternate cubic-bezier(0.25, 1, 0.5, 1); }
+                    .sparkle { animation: spinSparkle 1.5s infinite linear; transform-origin: 50px 17px; }
+                    @keyframes cheerPaws {
+                        from { transform: translateY(0); }
+                        to { transform: translateY(-6px); }
+                    }
+                    @keyframes spinSparkle {
+                        from { transform: rotate(0deg) scale(0.8); }
+                        50% { transform: rotate(185deg) scale(1.2); }
+                        to { transform: rotate(360deg) scale(0.8); }
+                    }
+                </style>
+            </svg>`
+        };
+
+        let currentBuddyState = "sleeping";
+        function setBuddyState(state, text) {
+            if (!buddyAvatar || !buddyStates[state]) return;
+            currentBuddyState = state;
+            buddyAvatar.innerHTML = buddyStates[state];
+            if (buddyBubble && text) {
+                buddyBubble.textContent = text;
+            }
+        }
+
+        let buddyRestoreTimeout = null;
+        function setBuddyTemporarily(tempState, text, durationMs = 3000) {
+            const prevState = currentBuddyState;
+            setBuddyState(tempState, text);
+            if (buddyRestoreTimeout) clearTimeout(buddyRestoreTimeout);
+            buddyRestoreTimeout = setTimeout(() => {
+                const autoText = prevState === "studying" ? "Back to focus! You're doing great! ⚡" : "Zzz... tap start when you're ready! 😴";
+                setBuddyState(prevState, autoText);
+            }, durationMs);
+        }
+
+        // --- Level & XP Gamification ---
+        function showNotification(title, message, type = "info") {
+            const container = $("notification-container");
+            if (!container) {
+                const div = document.createElement("div");
+                div.id = "notification-container";
+                div.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    z-index: 10000;
+                `;
+                document.body.appendChild(div);
+            }
+            
+            const card = document.createElement("div");
+            card.style.cssText = `
+                background: var(--surface);
+                border: 1px solid var(--accent);
+                border-radius: var(--radius);
+                padding: 12px 18px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-width: 240px;
+                animation: slideInNotification 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                color: var(--text);
+                backdrop-filter: blur(10px);
+            `;
+            
+            const titleEl = document.createElement("strong");
+            titleEl.textContent = title;
+            titleEl.style.fontSize = "13px";
+            titleEl.style.color = "var(--accent)";
+            
+            const descEl = document.createElement("span");
+            descEl.textContent = message;
+            descEl.style.fontSize = "12px";
+            descEl.style.color = "var(--text-muted)";
+            
+            card.appendChild(titleEl);
+            card.appendChild(descEl);
+            
+            $("notification-container").appendChild(card);
+            
+            if (!document.getElementById("notification-keyframe")) {
+                const style = document.createElement("style");
+                style.id = "notification-keyframe";
+                style.textContent = `
+                    @keyframes slideInNotification {
+                        from { transform: translateX(-100px); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            setTimeout(() => {
+                card.style.transition = "all 0.3s ease";
+                card.style.transform = "translateX(-150%)";
+                card.style.opacity = "0";
+                setTimeout(() => card.remove(), 300);
+            }, 4000);
+        }
+
+        function addXp(amount, showToast = false) {
+            studyStats.xp = (studyStats.xp || 0) + amount;
+            let leveledUp = false;
+            let targetXp = studyStats.level * 100;
+            
+            while (studyStats.xp >= targetXp) {
+                studyStats.xp -= targetXp;
+                studyStats.level = (studyStats.level || 1) + 1;
+                targetXp = studyStats.level * 100;
+                leveledUp = true;
+            }
+            
+            if (leveledUp) {
+                showNotification("🎉 LEVEL UP!", `You reached Level ${studyStats.level}! 🏆`, "success");
+                setBuddyState("cheering", `Wow! LEVEL UP! We are now Level ${studyStats.level}! 🏆`);
+            } else if (showToast) {
+                showNotification("XP Gained", `+${amount} XP earned! ⚡`, "info");
+            }
+            
             saveStudyStats();
         }
 
@@ -993,6 +1213,17 @@
             if (isSystem) row.classList.add("system");
             if (isAI) row.classList.add("ai");
             if (isYou) row.classList.add("you");
+
+            // React with pet cheering for non-system messages
+            if (!isSystem && typeof setBuddyTemporarily === "function") {
+                if (type === "note") {
+                    setBuddyTemporarily("cheering", "A new note was shared! Writing helps memory! 📝");
+                } else if (type === "file") {
+                    setBuddyTemporarily("cheering", "Resource file uploaded! Awesome study materials! 📎");
+                } else {
+                    setBuddyTemporarily("cheering", isYou ? "Spot on! Sharing thoughts is great! 💬" : `${user} says hello! 💬`);
+                }
+            }
 
             if (isSystem) {
                 row.textContent = text;
@@ -1341,12 +1572,12 @@
                 const aBtn = $("audio-btn");
                 if (vBtn) {
                     vBtn.disabled = true;
-                    vBtn.innerHTML = "🚫 Video Off";
+                    vBtn.innerHTML = ICON_VIDEO_OFF;
                     vBtn.classList.add("btn-red");
                 }
                 if (aBtn) {
                     aBtn.disabled = true;
-                    aBtn.innerHTML = "🔇 Audio Off";
+                    aBtn.innerHTML = ICON_AUDIO_OFF;
                     aBtn.classList.add("btn-red");
                 }
                 return;
@@ -1359,13 +1590,13 @@
                 // Sync initial button states
                 const vBtn = $("video-btn");
                 if (vBtn) {
-                    vBtn.innerHTML = "📹 Video On";
+                    vBtn.innerHTML = ICON_VIDEO_ON;
                     vBtn.classList.remove("off", "btn-red");
                     vBtn.classList.add("btn-primary");
                 }
                 const aBtn = $("audio-btn");
                 if (aBtn) {
-                    aBtn.innerHTML = "🎙️ Audio On";
+                    aBtn.innerHTML = ICON_AUDIO_ON;
                     aBtn.classList.remove("off", "btn-red");
                     aBtn.classList.add("btn-primary");
                 }
@@ -1387,12 +1618,12 @@
                 const aBtn = $("audio-btn");
                 if (vBtn) {
                     vBtn.disabled = true;
-                    vBtn.innerHTML = "🚫 Video Off";
+                    vBtn.innerHTML = ICON_VIDEO_OFF;
                     vBtn.classList.add("btn-red");
                 }
                 if (aBtn) {
                     aBtn.disabled = true;
-                    aBtn.innerHTML = "🔇 Audio Off";
+                    aBtn.innerHTML = ICON_AUDIO_OFF;
                     aBtn.classList.add("btn-red");
                 }
             }
@@ -1415,11 +1646,11 @@
             const btn = $("video-btn");
             btn.classList.toggle("off", !videoEnabled);
             if (videoEnabled) {
-                btn.innerHTML = "📹 Video On";
+                btn.innerHTML = ICON_VIDEO_ON;
                 btn.classList.remove("btn-red");
                 btn.classList.add("btn-primary");
             } else {
-                btn.innerHTML = "🚫 Video Off";
+                btn.innerHTML = ICON_VIDEO_OFF;
                 btn.classList.remove("btn-primary");
                 btn.classList.add("btn-red");
             }
@@ -1436,11 +1667,11 @@
             const btn = $("audio-btn");
             btn.classList.toggle("off", !audioEnabled);
             if (audioEnabled) {
-                btn.innerHTML = "🎙️ Audio On";
+                btn.innerHTML = ICON_AUDIO_ON;
                 btn.classList.remove("btn-red");
                 btn.classList.add("btn-primary");
             } else {
-                btn.innerHTML = "🔇 Audio Off";
+                btn.innerHTML = ICON_AUDIO_OFF;
                 btn.classList.remove("btn-primary");
                 btn.classList.add("btn-red");
             }
@@ -1459,6 +1690,9 @@
             timerRunning = true;
             $("timer-start").disabled = true;
             $("timer-pause").disabled = false;
+
+            // Sync pet studying state
+            setBuddyState("studying", "Focus mode activated! Let's crush this! ✍️");
 
             timerInterval = setInterval(() => {
                 recordFocusedSecond();
@@ -1483,6 +1717,9 @@
             timerRunning = false;
             $("timer-start").disabled = false;
             $("timer-pause").disabled = true;
+
+            // Sync pet sleeping state
+            setBuddyState("sleeping", "Time for a quick stretch. Rest up! ☕");
         }
 
         function resetTimer() {
@@ -1492,6 +1729,9 @@
             $("timer-start").disabled = false;
             $("timer-pause").disabled = true;
             updateTimerDisplay();
+
+            // Sync pet sleeping state
+            setBuddyState("sleeping", "Ready to start a new focus session? Let's go!");
         }
 
         async function sendChat() {
@@ -1723,6 +1963,17 @@
                         }
                     );
                 }
+
+                // Award XP when you send messages/notes/files
+                if (data.user === userName) {
+                    if (data.type === "note") {
+                        addXp(50, true);
+                    } else if (data.type === "file") {
+                        addXp(50, true);
+                    } else if (data.type === "message") {
+                        addXp(5, false); // Don't show toast for simple messages to avoid spam
+                    }
+                }
             });
         }
 
@@ -1735,6 +1986,15 @@
                 markStudyDay();
                 saveStudyStats();
             }
+
+            // Stop all audio streams on exit
+            if (typeof audioStreams !== "undefined" && audioStreams) {
+                Object.values(audioStreams).forEach(audio => {
+                    try { audio.pause(); } catch(e){}
+                    audio.src = "";
+                });
+            }
+            stopNoise();
 
             if (socket) {
                 socket.emit("leave_room_signal", {
@@ -1779,6 +2039,15 @@
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "hidden") saveStudyStats();
         });
+
+        handleSoundToggle("lofi", null, null, audioStreams.lofi);
+        handleSoundToggle("rain", null, null, audioStreams.rain);
+        handleSoundToggle("cafe", null, null, audioStreams.cafe);
+        handleSoundToggle("forest", null, null, audioStreams.forest);
+        handleSoundToggle("noise", playNoise, stopNoise, null);
+
+        // Sync initial pet state
+        setBuddyState("sleeping", "Zzz... tap start when you're ready! 😴");
 
         updateTimerDisplay();
         loadHistory();
