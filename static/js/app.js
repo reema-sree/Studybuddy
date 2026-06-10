@@ -972,6 +972,104 @@
             saveStudyStats();
         }
 
+        // --- Soundboard Audio Setup ---
+        const audioStreams = {
+            lofi: new Audio("https://stream.zeno.fm/0r0xa792kwzuv"),
+            rain: new Audio("https://www.soundjay.com/nature/sounds/rain-07.mp3"),
+            cafe: new Audio("https://www.soundjay.com/misc/sounds/coffee-shop-1.mp3"),
+            forest: new Audio("https://www.soundjay.com/nature/sounds/forest-wind-01.mp3")
+        };
+
+        Object.values(audioStreams).forEach(audio => {
+            audio.loop = true;
+            audio.crossOrigin = "anonymous";
+        });
+
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === "suspended") {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        let noiseSource = null;
+        let noiseGain = null;
+
+        function playNoise() {
+            const ctx = getAudioContext();
+            const bufferSize = 2 * ctx.sampleRate;
+            const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+
+            noiseSource = ctx.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+            noiseSource.loop = true;
+
+            noiseGain = ctx.createGain();
+            const slider = $("volume-noise");
+            noiseGain.gain.value = slider ? parseFloat(slider.value) : 0.5;
+
+            noiseSource.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noiseSource.start();
+        }
+
+        function stopNoise() {
+            if (noiseSource) {
+                try { noiseSource.stop(); } catch(e){}
+                noiseSource = null;
+            }
+        }
+
+        function handleSoundToggle(key, startFn, stopFn, audioObj) {
+            const toggle = $(`play-${key}`);
+            const slider = $(`volume-${key}`);
+            if (!toggle) return;
+
+            toggle.addEventListener("change", () => {
+                if (toggle.checked) {
+                    if (audioObj) {
+                        audioObj.volume = slider ? parseFloat(slider.value) : 0.5;
+                        audioObj.play().catch(err => {
+                            console.warn("Audio play failed:", err);
+                            toggle.checked = false;
+                        });
+                    } else if (startFn) {
+                        try {
+                            startFn();
+                        } catch(err) {
+                            console.warn("Noise start failed:", err);
+                            toggle.checked = false;
+                        }
+                    }
+                } else {
+                    if (audioObj) {
+                        audioObj.pause();
+                    } else if (stopFn) {
+                        stopFn();
+                    }
+                }
+            });
+
+            if (slider) {
+                slider.addEventListener("input", () => {
+                    const vol = parseFloat(slider.value);
+                    if (audioObj) {
+                        audioObj.volume = vol;
+                    } else if (key === "noise" && noiseGain) {
+                        noiseGain.gain.value = vol;
+                    }
+                });
+            }
+        }
+
         // --- Virtual Pet Logic ---
         const buddyAvatar = $("buddy-avatar-wrap");
         const buddyBubble = $("buddy-bubble-text");
@@ -2039,6 +2137,21 @@
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "hidden") saveStudyStats();
         });
+
+        const sbToggleBtn = $("soundboard-toggle-btn");
+        const sbPopover = $("soundboard-popover");
+        const sbCloseBtn = $("close-soundboard");
+
+        if (sbToggleBtn && sbPopover) {
+            sbToggleBtn.addEventListener("click", () => {
+                sbPopover.classList.toggle("hidden");
+            });
+        }
+        if (sbCloseBtn && sbPopover) {
+            sbCloseBtn.addEventListener("click", () => {
+                sbPopover.classList.add("hidden");
+            });
+        }
 
         handleSoundToggle("lofi", null, null, audioStreams.lofi);
         handleSoundToggle("rain", null, null, audioStreams.rain);
