@@ -593,6 +593,9 @@ def is_verified(email: str) -> bool:
 
 def check_auth(cur, email: str, auth_token: str):
     """Returns user row if token is valid, else None."""
+    if not email or not auth_token:
+        return None
+
     cur.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cur.fetchone()
     if not user or user["auth_token"] != auth_token:
@@ -605,7 +608,7 @@ async def register(request: Request):
     data = await request.json()
     name     = (data.get("name") or "").strip()
     email    = (data.get("email") or "").lower().strip()
-    password = (data.get("password") or "").strip()
+    password = (data.get("password") or "")
 
     if not name or not email or not password:
         return {"success": False, "error": "Name, email and password are all required."}
@@ -664,7 +667,7 @@ async def register(request: Request):
 async def auth_login(request: Request):
     data     = await request.json()
     email    = (data.get("email") or "").lower().strip()
-    password = (data.get("password") or "").strip()
+    password = (data.get("password") or "")
 
     if not email or not password:
         return {"success": False, "error": "Email and password are required."}
@@ -797,7 +800,7 @@ async def reset_password(request: Request):
     data         = await request.json()
     email        = (data.get("email") or "").lower().strip()
     code         = (data.get("code") or "").strip()
-    new_password = (data.get("new_password") or "").strip()
+    new_password = (data.get("new_password") or "")
 
     if not email or not code or not new_password:
         return {"success": False, "error": "All fields are required."}

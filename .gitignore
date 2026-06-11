@@ -5,10 +5,11 @@ studybuddy.db
 firebase-key.json
 venv/
 .venv/
+.venv-*/
 
-# add these
 .DS_Store
 *.log
+.uvicorn.*.log
 .env.local
 .env.production
 static/uploads/

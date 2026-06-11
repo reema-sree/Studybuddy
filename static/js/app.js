@@ -151,27 +151,13 @@
             // Merge server stats with localStorage — take the higher value for each number field
             const localStats = readStatsForUser(user);
             const serverStats = cleanStats(data.stats || {});
-            const merged = {
-                focusSeconds:      Math.max(localStats.focusSeconds, serverStats.focusSeconds),
-                completedSeconds:  Math.max(localStats.completedSeconds, serverStats.completedSeconds),
-                completedSessions: Math.max(localStats.completedSessions, serverStats.completedSessions),
-                notesShared:       Math.max(localStats.notesShared, serverStats.notesShared),
-                earlyLeaves:       Math.max(localStats.earlyLeaves || 0, serverStats.earlyLeaves || 0),
-                studyDates:        [...new Set([...localStats.studyDates, ...serverStats.studyDates])].sort()
-            };
+            const merged = mergeStats(localStats, serverStats);
             localStorage.setItem(statsKeyForEmail(user.email), JSON.stringify(merged));
 
             // Merge notes — combine and deduplicate by createdAt
             const localNotes = readNotesForUser(user);
             const serverNotes = Array.isArray(data.notes) ? data.notes : [];
-            const allNotes = [...localNotes, ...serverNotes];
-            const seen = new Set();
-            const mergedNotes = allNotes.filter(n => {
-                const key = n.createdAt || n.title;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            }).slice(0, 50);
+            const mergedNotes = dedupeNotes([...localNotes, ...serverNotes]).slice(0, 50);
             localStorage.setItem(notesKeyForEmail(user.email), JSON.stringify(mergedNotes));
         } catch { /* silent */ }
     }
@@ -235,6 +221,25 @@
             studyDates: [...new Set(studyDates)].sort(),
             xp: Number(raw?.xp) || 0,
             level: Number(raw?.level) || 1
+        };
+    }
+
+    function mergeStats(localStats, serverStats) {
+        const local = cleanStats(localStats || {});
+        const server = cleanStats(serverStats || {});
+        const useServerProgress =
+            server.level > local.level ||
+            (server.level === local.level && server.xp > local.xp);
+
+        return {
+            focusSeconds:      Math.max(local.focusSeconds, server.focusSeconds),
+            completedSeconds:  Math.max(local.completedSeconds, server.completedSeconds),
+            completedSessions: Math.max(local.completedSessions, server.completedSessions),
+            notesShared:       Math.max(local.notesShared, server.notesShared),
+            earlyLeaves:       Math.max(local.earlyLeaves || 0, server.earlyLeaves || 0),
+            studyDates:        [...new Set([...local.studyDates, ...server.studyDates])].sort(),
+            xp:                useServerProgress ? server.xp : local.xp,
+            level:             useServerProgress ? server.level : local.level
         };
     }
 
@@ -345,12 +350,31 @@
         }
     }
 
+    function noteKey(note) {
+        const title = String(note?.title || "").trim().toLowerCase();
+        const content = String(note?.content || "").trim();
+        return note?.createdAt ? `${note.createdAt}|${title}` : `${title}|${content}`;
+    }
+
+    function dedupeNotes(notes) {
+        const seen = new Set();
+        return (Array.isArray(notes) ? notes : []).filter((note) => {
+            const key = noteKey(note);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
     function saveNoteForUser(user, note) {
         if (!user?.email) return;
 
+        const normalizedNote = {
+            ...note,
+            createdAt: note?.createdAt || new Date().toISOString()
+        };
         const notes = readNotesForUser(user);
-        notes.unshift(note);
-        const trimmed = notes.slice(0, 50);
+        const trimmed = dedupeNotes([normalizedNote, ...notes]).slice(0, 50);
         localStorage.setItem(notesKeyForEmail(user.email), JSON.stringify(trimmed));
 
         // Sync to server so notes persist across devices
@@ -460,7 +484,6 @@
             show("auth-password",     mode === "login" || mode === "register" || mode === "reset");
             show("auth-code-wrap",    mode === "verify" || mode === "reset");
             show("auth-newpass-wrap", mode === "reset");
-            show("auth-switch-wrap",  mode === "login" || mode === "register");
 
             const switchLink = $("auth-switch-link");
             if (switchLink) switchLink.textContent = mode === "login"
@@ -538,26 +561,12 @@
             if (result.stats) {
                 const local  = readStatsForUser(currentUser);
                 const server = cleanStats(result.stats);
-                const merged = {
-                    focusSeconds:      Math.max(local.focusSeconds, server.focusSeconds),
-                    completedSeconds:  Math.max(local.completedSeconds, server.completedSeconds),
-                    completedSessions: Math.max(local.completedSessions, server.completedSessions),
-                    notesShared:       Math.max(local.notesShared, server.notesShared),
-                    earlyLeaves:       Math.max(local.earlyLeaves || 0, server.earlyLeaves || 0),
-                    studyDates:        [...new Set([...local.studyDates, ...(server.studyDates || [])])].sort()
-                };
+                const merged = mergeStats(local, server);
                 localStorage.setItem(statsKeyForEmail(currentUser.email), JSON.stringify(merged));
             }
             if (Array.isArray(result.notes) && result.notes.length) {
                 const local = readNotesForUser(currentUser);
-                const all   = [...local, ...result.notes];
-                const seen  = new Set();
-                const merged = all.filter(n => {
-                    const key = n.createdAt || n.title;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
-                    return true;
-                }).slice(0, 50);
+                const merged = dedupeNotes([...local, ...result.notes]).slice(0, 50);
                 localStorage.setItem(notesKeyForEmail(currentUser.email), JSON.stringify(merged));
             }
             updateUserUi();
@@ -982,7 +991,8 @@
 
         Object.values(audioStreams).forEach(audio => {
             audio.loop = true;
-            audio.crossOrigin = "anonymous";
+            // NOTE: do NOT set crossOrigin on Audio objects — it triggers a CORS
+            // preflight that the Google Action Sound servers don't support, blocking playback.
         });
 
         let audioCtx = null;
@@ -1166,11 +1176,11 @@
 
         // --- Level & XP Gamification ---
         function showNotification(title, message, type = "info") {
-            const container = $("notification-container");
+            let container = $("notification-container");
             if (!container) {
-                const div = document.createElement("div");
-                div.id = "notification-container";
-                div.style.cssText = `
+                container = document.createElement("div");
+                container.id = "notification-container";
+                container.style.cssText = `
                     position: fixed;
                     bottom: 20px;
                     left: 20px;
@@ -1179,7 +1189,7 @@
                     gap: 10px;
                     z-index: 10000;
                 `;
-                document.body.appendChild(div);
+                document.body.appendChild(container);
             }
             
             const card = document.createElement("div");
@@ -1211,7 +1221,7 @@
             card.appendChild(titleEl);
             card.appendChild(descEl);
             
-            $("notification-container").appendChild(card);
+            container.appendChild(card);
             
             if (!document.getElementById("notification-keyframe")) {
                 const style = document.createElement("style");
@@ -1591,10 +1601,6 @@
             }
 
             updateGridClass();
-
-            if (users.length >= 2 && !timerRunning) {
-                startTimer();
-            }
         }
 
         async function handleOffer(data) {
@@ -1987,6 +1993,18 @@
 
                 data.messages.forEach((msg) => {
                     addChatMessage(msg.user, msg.text, msg.type, msg.fileName);
+                    // BUG FIX: also save notes from history so they appear on the home dashboard
+                    if (msg.type === "note") {
+                        const fullUser = getUser() || { email: userEmail };
+                        saveNoteForUser(fullUser, {
+                            title: msg.fileName || `${msg.user}'s Note`,
+                            content: msg.text,
+                            roomCode,
+                            subject: userSubject,
+                            sharedBy: msg.user,
+                            createdAt: msg.timestamp || new Date().toISOString()
+                        });
+                    }
                 });
             } catch {
                 addChatMessage("system", "Could not load previous chat messages.");
@@ -2057,7 +2075,7 @@
                             roomCode,
                             subject: userSubject,
                             sharedBy: data.user,
-                            createdAt: new Date().toISOString()
+                            createdAt: data.timestamp || new Date().toISOString()
                         }
                     );
                 }
@@ -2172,9 +2190,11 @@
         const toggleBtn = document.getElementById("theme-toggle-btn");
         if (!toggleBtn) return;
 
-        // Sync initial button icon
+        // Sync initial button icon — icon represents the ACTION (what clicking will switch to)
+        // In dark mode: clicking switches to light → show ☀️
+        // In light mode: clicking switches to dark → show 🌙
         const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
-        toggleBtn.textContent = currentTheme === "dark" ? "🌙" : "☀️";
+        toggleBtn.textContent = currentTheme === "dark" ? "☀️" : "🌙";
 
         toggleBtn.addEventListener("click", () => {
             const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
@@ -2182,7 +2202,8 @@
 
             document.documentElement.setAttribute("data-theme", newTheme);
             localStorage.setItem("theme", newTheme);
-            toggleBtn.textContent = newTheme === "dark" ? "🌙" : "☀️";
+            // Show icon for the NEXT possible action
+            toggleBtn.textContent = newTheme === "dark" ? "☀️" : "🌙";
         });
     }
 

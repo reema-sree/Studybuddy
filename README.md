@@ -1,85 +1,121 @@
-# GrindRoom 📚
+# Study Buddy
 
-> A peaceful, collaborative study platform designed to mimic the warm environment of a library. Engage in focused study sessions with peers in real-time.
+Study Buddy is a collaborative study-room app built with FastAPI, Socket.IO, SQLite, and vanilla HTML/CSS/JavaScript. Students can sign in, create or join small study rooms, use video/audio, share notes and files, track focus stats, and ask AI study questions when Gemini is configured.
 
-**Live Demo:** [GrindRoom Live App](https://studybuddy-production-489f.up.railway.app)
+## Features
 
-## ✨ Features
+- Email-based account flow with verification and password reset codes
+- Private and matched study rooms for up to 3 students
+- Socket.IO room presence, chat, file sharing, and WebRTC signaling
+- 45-minute focus timer with local and server-synced study stats
+- Notes history synced per signed-in user
+- Optional Gemini-powered AI chat, summaries, quizzes, and study plans
+- Optional TURN server configuration for cross-network video reliability
 
-- 🕒 **Structured Study Sessions** — Built-in 45-minute focus phases to maximize productivity using the Pomodoro technique.
-- 👥 **Intimate Study Rooms** — Join real-time study rooms with a maximum capacity of 3 students to maintain a focused, distraction-free environment.
-- 🔄 **Real-time Sync** — Powered by WebSockets (Socket.IO) for live updates on room occupancy, timers, and active study phases.
-- 📁 **Shared Resources** — Access and share study materials (PDFs, notes, study playlists) directly within your study group.
-- 🎨 **Warm Library Aesthetic** — A beautifully designed, distraction-free UI featuring soothing typography (Playfair Display & Lora) and a structured layout.
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
-|---|---|
-| **Frontend** | HTML5, Vanilla CSS, Vanilla JavaScript |
-| **Backend** | Node.js, Express.js |
-| **Real-time Engine**| Socket.IO |
-| **Fonts** | Playfair Display, Lora (Google Fonts) |
+| --- | --- |
+| Backend | FastAPI, python-socketio |
+| Database | SQLite by default, optional MySQL backend in `main_mysql.py` |
+| Frontend | HTML templates, vanilla CSS, vanilla JavaScript |
+| Auth | bcrypt password hashing, email verification codes |
+| AI | Google GenAI SDK, configured with `GEMINI_KEY` |
 
-## 🚀 Getting Started (Local)
+## Local Setup
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v14 or higher)
-- npm (comes with Node.js)
+Use the project virtual environment at `.venv`. The duplicate `.venv-1` folder is not the canonical environment and may be missing dependencies.
 
-### 1. Navigate to the project directory
-```bash
-cd GrindRoomWeb
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 2. Install dependencies
-```bash
-npm install
+Create a `.env` file for local secrets. Common variables:
+
+```env
+GEMINI_KEY=your_gemini_key
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_app_password
+TURN_URL=turn:your-turn-server:3478
+TURN_USERNAME=your_turn_username
+TURN_PASSWORD=your_turn_password
 ```
 
-### 3. Run the development server
-```bash
-# Starts the server using nodemon for automatic restarts on file changes
-npm run dev
+Email can also be configured with Brevo or Resend:
 
-# OR start the server normally
-npm start
+```env
+BREVO_API_KEY=your_brevo_key
+BREVO_SENDER=verified_sender@example.com
+
+RESEND_API_KEY=your_resend_key
+RESEND_FROM=Study Buddy <verified_sender@example.com>
 ```
 
-### 4. Open the application
-Navigate to **http://localhost:3000** in your web browser.
+## Run The App
 
-## 📁 Project Structure
-
-```
-GrindRoomWeb/
-├── package.json          ← Node.js project configuration and dependencies
-├── server.js             ← Express backend and Socket.IO real-time server
-└── public/               ← Frontend static assets
-    ├── index.html        ← Main application dashboard
-    ├── main.js           ← Frontend logic and WebSocket client
-    └── style.css         ← Styling and UI design system
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:socket_app --host 127.0.0.1 --port 8000
 ```
 
-## 🔌 WebSockets / API Reference
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-The real-time functionality is handled entirely over Socket.IO connections.
+## Verification
 
-| Event | Direction | Description |
-|---|---|---|
-| `connection` | Client -> Server | Establishes the WebSocket connection |
-| `join_room` | Client -> Server | Request to join a specific study room ID |
-| `room_update` | Server -> Client | Broadcasts current room state (users, timer, phase) |
-| `room_full` | Server -> Client | Emitted when a user tries to join a room with 3 users |
-| `disconnect` | Client -> Server | Automatically handles user cleanup from rooms |
+```powershell
+.\.venv\Scripts\python.exe -m py_compile main.py main_mysql.py check.py check_frontend.py
+node --check static\js\app.js
+.\.venv\Scripts\python.exe check.py
+.\.venv\Scripts\python.exe check_frontend.py
+.\.venv\Scripts\python.exe -m pip check
+```
 
-## 🔮 Future Enhancements
+The plain `python` command on this machine may point outside the project venv and miss dependencies such as `bcrypt`. Prefer `.\.venv\Scripts\python.exe`.
 
-- **User Authentication**: Implement user login to save profiles, study streaks, and personal study analytics.
-- **WebRTC Voice/Video**: Allow muted, background ambient video or voice channels to simulate sitting at a table together.
-- **Persistent Database**: Transition from the in-memory dummy database to MongoDB or PostgreSQL to persist room histories and shared resources.
-- **Customizable Timers**: Allow room creators to set custom study intervals (e.g., 25/5 Pomodoro or 50/10).
+## Project Structure
 
-## 📄 License
+```text
+.
+|-- main.py                 # Primary FastAPI + SQLite app
+|-- main_mysql.py           # Optional MySQL-backed variant
+|-- requirements.txt        # Python dependencies
+|-- check.py                # Backend verification script
+|-- check_frontend.py       # Frontend/source verification script
+|-- templates/
+|   |-- home.html
+|   |-- login.html
+|   |-- room.html
+|   `-- study.html
+`-- static/
+    |-- css/style.css
+    `-- js/app.js
+```
 
-This project is licensed under the MIT License.
+## API And Socket.IO Notes
+
+HTTP routes include:
+
+- `GET /health`
+- `GET /api/ice-config`
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/verify-email`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /room/create`
+- `POST /room/join`
+- `POST /match/join-queue`
+- `POST /match/leave-queue`
+- `GET /chat/{room_code}`
+- `GET /room/{room_code}/info`
+
+Socket.IO events include:
+
+- `join_room_signal`
+- `leave_room_signal`
+- `room-users`
+- `user-left`
+- `chat_message_socket`
+- `new-message`
+- `webrtc_offer`
+- `webrtc_answer`
+- `webrtc_ice_candidate`
