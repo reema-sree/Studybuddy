@@ -30,7 +30,16 @@ except Exception:
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
-DB_PATH = BASE_DIR / "studybuddy.db"
+
+if os.getenv("VERCEL"):
+    DB_PATH = Path("/tmp/studybuddy.db")
+    UPLOAD_DIR = Path("/tmp/uploads")
+else:
+    DB_PATH = BASE_DIR / "studybuddy.db"
+    UPLOAD_DIR = STATIC_DIR / "uploads"
+
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -99,6 +108,18 @@ sio = socketio.AsyncServer(
 )
 
 app = FastAPI(title="Study Buddy")
+
+@app.get("/static/uploads/{filename}")
+async def get_upload_file(filename: str):
+    file_path = UPLOAD_DIR / filename
+    if file_path.exists():
+        return FileResponse(file_path)
+    static_file_path = STATIC_DIR / "uploads" / filename
+    if static_file_path.exists():
+        return FileResponse(static_file_path)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=404, content={"detail": "File not found"})
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 socket_app = socketio.ASGIApp(sio, app)
 
@@ -453,8 +474,7 @@ async def webrtc_ice_candidate(sid, data):
 import base64
 import re
 
-UPLOAD_DIR = STATIC_DIR / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def save_uploaded_file(base64_data: str, filename: str) -> str:
     """
@@ -1052,7 +1072,10 @@ async def generate_study_plan(request: Request):
     data = await request.json()
     subject = (data.get("subject") or "General").strip()
     goal = (data.get("goal") or subject).strip()
-    minutes = int(data.get("minutes") or 45)
+    try:
+        minutes = int(data.get("minutes") or 45)
+    except (ValueError, TypeError):
+        minutes = 45
 
     if not ai_client:
         return {"success": False, "plan": "AI is not configured. Add GEMINI_KEY to .env."}

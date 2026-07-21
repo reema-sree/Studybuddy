@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Study Buddy — your collaborative video study room with AI assistance, notes, and ambient sounds.">
-    <title>Study Room — Study Buddy</title>
+    <title>Focus Era — StudyBuddy 🔒</title>
     <script>
         (function() {
             var t = localStorage.getItem('theme') || 'light';
@@ -13,7 +13,7 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
@@ -32,9 +32,9 @@
     <div class="room-layout">
         <header class="room-topbar">
             <div class="brand" style="flex: unset;">
-                <div class="brand-mark">SB</div>
+                <div class="brand-mark" style="background: var(--gradient-accent)">SB</div>
                 <div>
-                    <div class="brand-title">Study Room</div>
+                    <div class="brand-title">Focus Room</div>
                     <div class="brand-subtitle">
                         Room <span id="room-code-display">------</span> &mdash;
                         <span id="connection-status">Connecting</span>
@@ -44,7 +44,7 @@
             <div class="button-row">
                 <div class="timer-container">
                     <span id="timer-display" class="timer">45:00</span>
-                    <button id="timer-start"  class="btn btn-green icon" style="padding: 4px 8px; border-radius: 12px;" title="Start timer">▶</button>
+                    <button id="timer-start"  class="btn btn-green icon" style="padding: 4px 8px; border-radius: 12px; background: var(--gradient-green);" title="Start timer">▶</button>
                     <button id="timer-pause"  class="btn btn-ghost icon" style="padding: 4px 8px; border-radius: 12px;" title="Pause timer" disabled>⏸</button>
                     <button id="timer-reset"  class="btn btn-ghost icon" style="padding: 4px 8px; border-radius: 12px;" title="Reset timer">↺</button>
                 </div>
@@ -72,7 +72,7 @@
             <!-- Soundboard Popover Panel -->
             <div id="soundboard-popover" class="soundboard-popover hidden">
                 <div class="soundboard-head">
-                    <h4>Lo-Fi Soundboard</h4>
+                    <h4>Ambient Vibe Check 🎵</h4>
                     <button id="close-soundboard" class="btn btn-ghost" style="padding:2px 8px; font-size:12px;">✕</button>
                 </div>
                 <div class="sound-track">
@@ -128,44 +128,44 @@
             <aside class="chat-panel">
                 <div class="chat-header">
                     <div>
-                        <h2>Study Chat</h2>
-                        <p>Ask teammates or use AI for quick help.</p>
+                        <h2>Vibe Chat & AI 💬</h2>
+                        <p>Chat with besties or use AI to cook answers.</p>
                     </div>
-                    <span class="ai-chip">AI ready</span>
+                    <span class="ai-chip">AI active</span>
                 </div>
 
                 <!-- Buddy the Virtual Pet -->
                 <div class="buddy-card" id="buddy-card">
                     <div class="buddy-avatar-wrap" id="buddy-avatar-wrap"></div>
                     <div class="buddy-bubble">
-                        <span id="buddy-bubble-text">Hi! Let's get to work! 🚀</span>
+                        <span id="buddy-bubble-text">Yo! Let's cook! 🍳</span>
                     </div>
                 </div>
 
                 <div id="chat-messages" class="chat-messages"></div>
 
                 <div class="ai-toolbar">
-                    <button id="open-notes-btn" class="btn btn-primary" style="flex:1;">Notes</button>
-                    <button id="ai-summary-btn" class="btn btn-ghost" style="flex:1;">Summary</button>
-                    <button id="ai-quiz-btn"    class="btn btn-ghost" style="flex:1;">Quiz</button>
+                    <button id="open-notes-btn" class="btn btn-primary" style="flex:1; background: var(--gradient-accent)">Notes 📝</button>
+                    <button id="ai-summary-btn" class="btn btn-ghost" style="flex:1;">Summary 🧠</button>
+                    <button id="ai-quiz-btn"    class="btn btn-ghost" style="flex:1;">Quiz ⚡</button>
                 </div>
 
                 <div class="button-row" style="padding: 0 14px;">
                     <label class="btn btn-ghost" style="flex:1; cursor:pointer;">
-                        File
+                        Attach File 📎
                         <input id="file-input" type="file" style="display:none;">
                     </label>
-                    <button id="ai-plan-btn" class="btn btn-ghost" style="flex:1;">Plan</button>
+                    <button id="ai-plan-btn" class="btn btn-ghost" style="flex:1;">Study Plan 📅</button>
                 </div>
 
                 <div class="quick-prompts">
-                    <button type="button" data-ai-prompt="explain this topic in simple words">Explain</button>
-                    <button type="button" data-ai-prompt="make 5 revision points">Revise</button>
-                    <button type="button" data-ai-prompt="give me a quick practice question">Practice</button>
+                    <button type="button" data-ai-prompt="explain this topic like I am five">Explain 💡</button>
+                    <button type="button" data-ai-prompt="give me the core notes, no cap">Revise 📚</button>
+                    <button type="button" data-ai-prompt="test my brain with a practice question">Practice ✍️</button>
                 </div>
 
                 <div class="chat-input-row">
-                    <input id="chat-input" class="input" type="text" placeholder="Message or /ai question..." style="flex: 1; width: auto;">
+                    <input id="chat-input" class="input" type="text" placeholder="Type message or /ai question... no cap" style="flex: 1; width: auto;">
                     <button id="send-chat-btn" class="btn btn-primary">Send</button>
                 </div>
             </aside>
@@ -174,12 +174,12 @@
 
     <div id="notes-modal" class="modal hidden">
         <div class="modal-card" style="max-width: 480px;">
-            <h2 class="panel-title">Study Notes</h2>
+            <h2 class="panel-title">Write Notes (Save Vibe) 📝</h2>
             <div class="field-stack">
                 <input id="note-title"   class="input" type="text" placeholder="Note title">
-                <textarea id="note-content" rows="7" placeholder="Write your notes..."></textarea>
+                <textarea id="note-content" rows="7" placeholder="Write your notes here... let it cook!"></textarea>
                 <div class="button-row" style="gap:8px;">
-                    <button id="share-note-btn" class="btn btn-primary" style="flex:1;">Share</button>
+                    <button id="share-note-btn" class="btn btn-primary" style="flex:1; background: var(--gradient-accent)">Share Note</button>
                     <button id="close-notes-btn" class="btn btn-ghost" style="flex:1;">Cancel</button>
                 </div>
             </div>

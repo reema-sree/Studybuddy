@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Study Buddy — collaborative video study rooms for students. Match with peers, share notes, and get AI-powered study help.">
-    <title>Study Buddy — Focused Learning Together</title>
+    <meta name="description" content="StudyBuddy — collaborative video vibe rooms for students. Match with peers, share notes, and get AI-powered study help.">
+    <title>StudyBuddy — Lock In & Cook 🧠⚡</title>
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'light';
@@ -13,7 +13,7 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <!-- FIX: data-page stays on body so app.js (document.body.dataset.page) detects it correctly -->
@@ -21,19 +21,19 @@
 
     <nav class="topbar">
         <div class="brand">
-            <div class="brand-mark">SB</div>
+            <div class="brand-mark" style="background: var(--gradient-accent)">SB</div>
             <div>
-                <h1 class="brand-title">Study Buddy</h1>
-                <p class="brand-subtitle">2–3 person video study rooms</p>
+                <h1 class="brand-title">StudyBuddy</h1>
+                <p class="brand-subtitle">2-3 person video hangout to escape brainrot</p>
             </div>
         </div>
         <button id="theme-toggle-btn" class="btn btn-ghost icon" style="font-size: 16px; margin-right: 8px;" aria-label="Toggle Theme">☀️</button>
         <button id="signin-btn" class="btn btn-primary">Sign In</button>
         <div id="user-profile" class="user-chip hidden">
-            <div id="user-avatar" class="avatar" aria-label="User avatar">U</div>
+            <div id="user-avatar" class="avatar" aria-label="User avatar" style="background: var(--gradient-accent)">U</div>
             <div>
                 <div id="username-display"></div>
-                <span id="verified-badge" class="badge hidden">Verified Student</span>
+                <span id="verified-badge" class="badge hidden">Verified Goat 🐐</span>
             </div>
             <button id="signout-btn" class="btn btn-ghost">Sign Out</button>
         </div>
@@ -44,8 +44,8 @@
         <section id="home-dashboard" class="dashboard-panel hidden" aria-label="Study dashboard">
             <div class="dashboard-head">
                 <div>
-                    <h2 class="dashboard-title">Your Study Dashboard</h2>
-                    <p class="dashboard-copy">Track concentrated hours, completed study time, active days, and loyalty points.</p>
+                    <h2 class="dashboard-title">Your Study Era ⚡</h2>
+                    <p class="dashboard-copy">Check your focus aura, completed grinding, streaks, and loyalty score. No cap, you're cooking.</p>
                 </div>
                 <span class="streak-pill" data-stat="streakLabel">0 day streak</span>
             </div>
@@ -67,19 +67,19 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <strong data-stat="focusHours">0.00</strong>
-                    <span>Hours Concentrated</span>
+                    <span>Aura Hours 🧘‍♂️</span>
                 </div>
                 <div class="stat-card">
                     <strong data-stat="completedHours">0.00</strong>
-                    <span>Hours Completed</span>
+                    <span>Locked In Hours 🔒</span>
                 </div>
                 <div class="stat-card days">
                     <strong data-stat="studyDays">0</strong>
-                    <span>Days Studied</span>
+                    <span>Streak Days 🔥</span>
                 </div>
                 <div class="stat-card points">
                     <strong data-stat="loyaltyPoints">0</strong>
-                    <span>Loyalty Points</span>
+                    <span>Aura Points ✨</span>
                 </div>
             </div>
         </section>
@@ -87,41 +87,41 @@
         <section class="notes-history-panel" aria-label="Notes history">
             <div class="notes-history-head">
                 <div>
-                    <h2 class="notes-history-title">Notes History</h2>
-                    <p class="notes-history-copy">Recently shared notes from your study rooms appear here for quick revision.</p>
+                    <h2 class="notes-history-title">Shared Brain Cells (Notes) 📝</h2>
+                    <p class="notes-history-copy">Shared notes from your study sessions appear here so you don't forget the lore.</p>
                 </div>
                 <span id="notes-history-count" class="notes-count">0 notes</span>
             </div>
             <div id="notes-history-list" class="notes-history-list">
-                <div class="notes-empty">No notes yet. Share notes from a study room and they will appear here.</div>
+                <div class="notes-empty">No notes yet. Share notes in a study room and they'll show up here. Vibe check: empty.</div>
             </div>
         </section>
 
         <section class="hero-grid">
             <div class="panel">
-                <h2 class="panel-title">Find Study Partners</h2>
-                <p class="panel-copy">Match with students studying the same subject and start a focused video room.</p>
+                <h2 class="panel-title">Find Your Study Tribe 🫂</h2>
+                <p class="panel-copy">Match with others grinding the same subject and start a focused video vibe session.</p>
                 <div class="field-stack">
                     <select id="match-subject" class="input" data-subject-select aria-label="Select subject">
                         <option value="" disabled selected>Select a subject...</option>
                     </select>
-                    <button id="match-btn" class="btn btn-green">Match with Students</button>
+                    <button id="match-btn" class="btn btn-green" style="background: var(--gradient-green)">Find a Study Bestie</button>
                     <div id="matching-status" class="status hidden">
                         <span id="matching-message">Looking for study partners...</span>
                         <button id="cancel-match-btn" class="btn btn-ghost">Cancel</button>
                     </div>
                 </div>
-                <p class="queue-note"><span id="queue-count">0</span> students waiting in queue</p>
+                <p class="queue-note"><span id="queue-count">0</span> besties waiting on the queue</p>
             </div>
 
             <div class="panel">
-                <h2 class="panel-title">Private Study Room</h2>
-                <p class="panel-copy">Create a private room or join using a room code.</p>
-                <button id="create-room-btn" class="btn btn-primary">Create Private Room</button>
+                <h2 class="panel-title">Private Vibe Room 🔒</h2>
+                <p class="panel-copy">Host a private study session or join with a room code.</p>
+                <button id="create-room-btn" class="btn btn-primary" style="background: var(--gradient-accent)">Create Private Room</button>
                 <div class="divider">OR</div>
                 <div class="join-row">
                     <input id="join-code-input" class="input" type="text" placeholder="ROOM CODE" maxlength="6" aria-label="Room code" style="font-family: var(--font-mono); font-size: 15px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase;">
-                    <button id="join-room-btn" class="btn btn-green">Join</button>
+                    <button id="join-room-btn" class="btn btn-green" style="background: var(--gradient-green)">Join Room</button>
                 </div>
             </div>
         </section>

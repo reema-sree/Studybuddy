@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sign in or create an account on Study Buddy to access collaborative study rooms.">
-    <title>Sign In — Study Buddy</title>
+    <meta name="description" content="Sign in or create an account on StudyBuddy to lock in.">
+    <title>Unlock StudyBuddy 🔒</title>
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'light';
@@ -13,7 +13,7 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <!-- FIX: removed class="app-shell" — body.app-shell in style.css was overriding the background -->
@@ -21,10 +21,10 @@
     <main class="center-page">
         <section class="panel login-card">
             <div class="brand" style="flex: unset; margin-bottom: 28px;">
-                <div class="brand-mark" style="box-shadow: var(--glow-accent);">SB</div>
+                <div class="brand-mark" style="background: var(--gradient-accent)">SB</div>
                 <div>
                     <h1 id="login-title" class="brand-title">Sign In</h1>
-                    <p id="login-copy" class="brand-subtitle">Welcome back to Study Buddy</p>
+                    <p id="login-copy" class="brand-subtitle">Unlock your StudyBuddy era</p>
                 </div>
             </div>
             <div class="field-stack">
@@ -45,11 +45,11 @@
                     <input id="login-newpass" class="input" type="password" placeholder="New password (min 6 characters)">
                 </div>
                 <p id="login-error" style="color:var(--red);font-size:13px;min-height:18px;margin:0;"></p>
-                <button id="login-submit" class="btn btn-primary">Sign In</button>
+                <button id="login-submit" class="btn btn-primary" style="background: var(--gradient-accent)">Sign In</button>
             </div>
             <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;align-items:center;">
                 <a id="login-switch-link" href="#" onclick="return false;" class="queue-note" style="color:var(--accent);">No account yet? Register</a>
-                <a id="login-forgot-link" href="#" onclick="return false;" class="queue-note">Forgot password?</a>
+                <a id="login-forgot-link" href="#" onclick="return false;" class="queue-note">Forgot password? Vibe check failed</a>
                 <a href="/" class="queue-note">← Back to home</a>
             </div>
         </section>

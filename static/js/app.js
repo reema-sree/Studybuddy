@@ -31,8 +31,9 @@
             const res = await fetch("/api/ice-config");
             const data = await res.json();
             _iceConfig = data; // { iceServers: [...] }
-        } catch {
+        } catch (e) {
             // Fallback if the endpoint fails
+            console.warn("fetchIceConfig failed, using fallback STUN only:", e);
             _iceConfig = {
                 iceServers: [
                     { urls: "stun:stun.l.google.com:19302" },
@@ -107,7 +108,7 @@
                 auth_token: user.auth_token,
                 stats
             });
-        } catch { /* silent — localStorage is the fallback */ }
+        } catch (e) { console.warn("syncStatsToServer failed (localStorage is fallback):", e); }
     }
 
     async function syncNotesToServer(user, notes) {
@@ -118,7 +119,7 @@
                 auth_token: user.auth_token,
                 notes
             });
-        } catch { /* silent */ }
+        } catch (e) { console.warn("syncNotesToServer failed:", e); }
     }
 
     async function verifyEmailCode(email, code) {
@@ -295,11 +296,11 @@
     }
 
     function levelTitle(lvl) {
-        if (lvl >= 10) return "Zen Master 🧘";
-        if (lvl >= 7)  return "Quantum Learner 🧠";
-        if (lvl >= 5)  return "Focus Knight ⚔️";
-        if (lvl >= 3)  return "Study Wizard 🧙";
-        return "Study Novice 🌱";
+        if (lvl >= 10) return "Ultimate Academic Weapon 👑";
+        if (lvl >= 7)  return "Certified Cooker 👨‍🍳";
+        if (lvl >= 5)  return "Aura Beast 🦁";
+        if (lvl >= 3)  return "Locked In Pro 🔒";
+        return "Grind Novice 🌱";
     }
 
     function renderHomeDashboard(user) {
@@ -1715,9 +1716,22 @@
                         }
                     }
                 }
-            } catch {
+            } catch (err) {
+                console.warn("getUserMedia failed:", err);
                 $("local-no-video").classList.remove("hidden");
-                $("local-no-video").textContent = "Camera or microphone permission was blocked.";
+                // Show a specific message based on the actual error type
+                const errName = err?.name || "";
+                if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+                    $("local-no-video").textContent = "No camera or microphone found on this device.";
+                } else if (errName === "NotReadableError" || errName === "TrackStartError") {
+                    $("local-no-video").textContent = "Camera is busy — close other apps using it and refresh.";
+                } else if (errName === "OverconstrainedError") {
+                    $("local-no-video").textContent = "Camera settings not supported by this device.";
+                } else if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+                    $("local-no-video").textContent = "Camera or microphone permission was blocked. Please allow access in your browser settings.";
+                } else {
+                    $("local-no-video").textContent = "Could not start camera: " + (err?.message || "unknown error");
+                }
                 const vBtn = $("video-btn");
                 const aBtn = $("audio-btn");
                 if (vBtn) {
